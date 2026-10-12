@@ -24,6 +24,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
+from qiskit.circuit.library import UGate
 
 from mqt.yaqs.core.libraries.circuit_library import add_long_range_interaction, lookup_qiskit_ordering
 from mqt.yaqs.core.libraries.circuit_library_utils import (
@@ -59,8 +60,9 @@ def test_extract_u_parameters_identity() -> None:
         (1.0, 2.0, 3.0),
     ],
 )
-def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float) -> None:
-    """Round-trip U3 matrix extract_u_parameters recovers (θ,φ,λ)."""
+@pytest.mark.parametrize("global_phase", [0.0, 0.37, np.pi / 2])
+def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float, global_phase: float) -> None:
+    """Extracted angles recover a unitary up to its global phase."""
     # build the standard U3(θ,φ,λ) matrix
     u = np.array(
         [
@@ -69,11 +71,14 @@ def test_extract_u_parameters_roundtrip(theta0: float, phi0: float, lam0: float)
         ],
         dtype=complex,
     )
+    u *= np.exp(1j * global_phase)
 
     theta, phi, lam = extract_u_parameters(u)
     assert theta == pytest.approx(theta0, rel=1e-8)
     assert phi == pytest.approx(phi0, rel=1e-8)
     assert lam == pytest.approx(lam0, rel=1e-8)
+    reconstructed = np.exp(1j * global_phase) * UGate(theta, phi, lam).to_matrix()
+    np.testing.assert_allclose(reconstructed, u, atol=1e-12)
 
 
 def test_add_random_single_qubit_rotation_adds_u_gate() -> None:

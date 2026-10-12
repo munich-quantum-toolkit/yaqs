@@ -174,6 +174,7 @@ modindex_common_prefix = ["mqt.yaqs."]
 
 autoapi_dirs = ["../src/mqt"]
 autoapi_python_use_implicit_namespaces = True
+autoapi_python_class_content = "both"
 autoapi_root = "api"
 autoapi_add_toctree_entry = False
 autoapi_ignore = [

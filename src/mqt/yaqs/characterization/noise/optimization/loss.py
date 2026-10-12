@@ -5,7 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Trajectory-mismatch objective for analytical noise-parameter optimization."""
+"""Trajectory-mismatch objective for noise-parameter fitting."""
 
 from __future__ import annotations
 

@@ -5,11 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Markovian noise-parameter characterization.
+"""Fit Markovian noise rates to observable dynamics.
 
-Package layout (internal; user entry point is :class:`~mqt.yaqs.noise_characterizer.NoiseCharacterizer`):
-
-- :mod:`.optimization` — analytical trajectory-matching pipeline (CMA-ES)
-- :mod:`.shared` — propagation and representation helpers shared across pipelines
-- :mod:`.backends` — optimizers and future surrogate/ML backends
+:class:`~mqt.yaqs.NoiseCharacterizer` provides the high-level interface.
 """

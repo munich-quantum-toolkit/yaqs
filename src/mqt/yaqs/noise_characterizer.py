@@ -38,24 +38,12 @@ _NOISE_REPRESENTATIONS: tuple[NoiseRepresentation, ...] = ("density_matrix", "ve
 
 
 class NoiseCharacterizer:
-    """Entry point for Markovian noise digital-twin workflows.
+    """Fit Markovian noise rates to measured or simulated dynamics.
 
-    **Use:** :meth:`characterize` (analytical optimization: fit noise rates from
-    experimental or simulated trajectories via CMA-ES trajectory matching)
+    :meth:`characterize` matches observable trajectories with a numerical forward model.
 
     Attributes:
-        parallel: Whether trajectory simulations run in parallel via a process pool.
-        max_workers: Maximum worker processes when ``parallel=True``.
-        show_progress: Whether to display a tqdm progress bar.
-        representation: ``"density_matrix"`` (Lindblad), ``"vector"`` (MCWF), ``"mps"`` (TJM),
-            or ``"auto"``.
-        lindblad_max_qubits: Auto cutover to Lindblad master-equation evolution.
-        vector_max_qubits: Auto cutover from MCWF to TJM.
-        mp_context: Multiprocessing context.
-        max_retries: Maximum retry attempts for transient worker errors.
-        retry_exceptions: Exception types that trigger a retry.
-        result: Most recent characterization result, or ``None`` before the first
-            :meth:`characterize` call.
+        result: Most recent fit, or ``None`` before the first :meth:`characterize` call.
     """
 
     def __init__(
@@ -77,7 +65,8 @@ class NoiseCharacterizer:
             parallel: Boolean that enables parallel trajectory execution.
             max_workers: Positive worker-process cap, or ``None`` for the default.
             show_progress: Boolean that controls tqdm progress bars.
-            representation: Forward-model selection (``"auto"`` prefers Lindblad on small chains).
+            representation: ``"density_matrix"`` (Lindblad), ``"vector"`` (MCWF),
+                ``"mps"`` (TJM), or ``"auto"`` using the qubit cutovers below.
             lindblad_max_qubits: Non-negative auto cutover to Lindblad evolution.
             vector_max_qubits: Non-negative auto cutover from MCWF to TJM.
             mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` multiprocessing start method.
@@ -150,34 +139,28 @@ class NoiseCharacterizer:
         ref_expectations: np.ndarray | None = None,
         **optimizer_kwargs: Any,
     ) -> NoiseCharacterizationResult:
-        """Fit noise strengths by analytical trajectory matching and CMA-ES.
+        """Fit noise strengths by matching observable trajectories.
 
-        Provide exactly one of ``reference_model`` (benchmark shortcut) or
-        ``ref_expectations`` (experimental trajectories).
+        Supply exactly one reference: a noise model to simulate or measured expectation values.
 
         Args:
             hamiltonian: System Hamiltonian.
-            sim_params: Analog simulation parameters.
+            sim_params: Analog simulation settings.
             init_state: Initial state.
-            init_guess: Initial noise guess defining jump-operator topology (one-site
-                and two-site processes supported via :class:`~mqt.yaqs.NoiseModel`).
-            observables: Fitting observables whose trajectories are matched.
+            init_guess: Initial noise model defining the one- or two-site jump operators to fit.
+            observables: Fitting observables, in the order of the reference rows.
             x_low: Lower parameter bounds.
             x_up: Upper parameter bounds.
-            reference_model: Optional reference model to simulate target trajectories.
-            ref_expectations: Optional experimental trajectories with shape ``(n_obs, n_times)``.
-            **optimizer_kwargs: Keyword arguments forwarded to the optimizer.
-                ``max_iter`` limits CMA-ES generations or bounded scalar-search
-                evaluations. SciPy can evaluate twice with ``max_iter=1``.
-                Initial-model loss and final fitted-trajectory evaluations are
-                outside this limit.
+            reference_model: Noise model used to generate reference trajectories.
+            ref_expectations: Measured trajectories with shape ``(n_obs, n_times)``.
+            **optimizer_kwargs: Settings for :func:`~mqt.yaqs.characterization.noise.backends.cma.cma_opt`,
+                which defines the optimization budget and seed.
 
         Returns:
-            Structured optimization result including fitted and reference trajectories.
+            Fitted noise model, optimization diagnostics, and fitted and reference trajectories.
 
         Raises:
-            ValueError: If neither or both of ``reference_model`` and
-                ``ref_expectations`` are provided.
+            ValueError: If neither or both reference inputs are supplied.
         """
         if (reference_model is None) == (ref_expectations is None):
             msg = "Specify exactly one of reference_model= or ref_expectations=."

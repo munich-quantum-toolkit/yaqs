@@ -54,18 +54,14 @@ __all__ = [
 def merge_mpo_tensors(
     left_tensor: NDArray[np.complex128], right_tensor: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
-    """Merge two neighboring MPO tensors into one.
-
-    The function contracts left_tensor and right_tensor over their shared virtual bond and
-    then reshapes the result to combine the physical indices appropriately.
+    """Contract the shared bond of two neighboring MPO tensors.
 
     Args:
-        left_tensor (NDArray[np.complex128]): Left MPO tensor.
-        right_tensor (NDArray[np.complex128]): Right MPO tensor.
+        left_tensor: Left tensor with axes ``(out, in, left, right)``.
+        right_tensor: Right tensor with the same axis convention.
 
     Returns:
-        NDArray[np.complex128]: The merged MPO tensor.
-
+        Tensor with paired output and input axes and the two exterior bonds.
     """
     merged_tensor = np.asarray(
         oe.contract("acei,bdif->abcdef", left_tensor, right_tensor, optimize=True), dtype=np.complex128
@@ -80,23 +76,16 @@ def update_right_environment(
     op: NDArray[np.complex128],
     right_env: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
-    r"""Perform a contraction step from right to left with an operator inserted.
-
-    The procedure involves:
-      1. Contracting tensor A with the right operator block R.
-      2. Contracting the result with the MPO tensor W.
-      3. Permuting the indices.
-      4. Contracting with the conjugate of tensor B to obtain the updated right environment.
+    """Extend a right operator environment one site to the left.
 
     Args:
-        ket (NDArray[np.complex128]): Tensor A (3-index tensor).
-        bra (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
-        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
+        ket: MPS tensor with shape ``(p, a, b)``.
+        bra: MPS tensor with shape ``(o, A, B)``; conjugated during contraction.
+        op: MPO tensor with shape ``(o, p, l, r)``.
+        right_env: Operator environment with shape ``(b, r, B)``.
 
     Returns:
-        NDArray[np.complex128]: The updated right operator block.
-
+        Left operator environment with shape ``(a, l, A)``.
     """
     assert ket.ndim == 3
     assert bra.ndim == 3
@@ -114,22 +103,16 @@ def update_left_environment(
     op: NDArray[np.complex128],
     left_env: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
-    r"""Perform a contraction step from left to right with an operator inserted.
-
-    The process contracts:
-      1. The left operator L with the conjugate of tensor B.
-      2. The result with the MPO tensor W.
-      3. Finally, contracts with tensor A to produce the updated left environment.
+    """Extend a left operator environment one site to the right.
 
     Args:
-        ket (NDArray[np.complex128]): Tensor A (3-index tensor).
-        bra (NDArray[np.complex128]): Tensor B (3-index tensor), to be conjugated.
-        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
+        ket: MPS tensor with shape ``(p, a, b)``.
+        bra: MPS tensor with shape ``(o, A, B)``; conjugated during contraction.
+        op: MPO tensor with shape ``(o, p, l, r)``.
+        left_env: Operator environment with shape ``(a, l, A)``.
 
     Returns:
-        NDArray[np.complex128]: The updated left operator block.
-
+        Right operator environment with shape ``(b, r, B)``.
     """
     tensor = np.tensordot(left_env, bra.conj(), axes=(2, 1))
     tensor = np.tensordot(op, tensor, axes=((0, 2), (2, 1)))
@@ -137,21 +120,17 @@ def update_left_environment(
 
 
 def initialize_right_environments(psi: MPS, op: MPO) -> list[NDArray[np.complex128]]:
-    """Compute the right operator blocks (partial contractions) for the given MPS and MPO.
-
-    Starting from the rightmost site, an identity-like tensor is constructed and then
-    the network is contracted site-by-site moving to the left to produce a list of right operator blocks.
+    """Build operator environments to the right of each MPS site.
 
     Args:
-        psi (MPS): The Matrix Product MPS representing the quantum state.
-        op (MPO): The Matrix Product Operator representing the Hamiltonian.
+        psi: MPS whose bra and ket are contracted.
+        op: MPO with the same length.
 
     Returns:
-        NDArray[np.complex128]: A list (of length equal to the number of sites) containing the right operator blocks.
+        One right environment per site; the final entry is the boundary identity.
 
     Raises:
-        ValueError: If state and operator length does not match.
-
+        ValueError: If state and operator lengths differ.
     """
     num_sites = psi.length
     if num_sites != op.length:
@@ -183,20 +162,17 @@ def project_site(
     op: NDArray[np.complex128],
     ket: NDArray[np.complex128],
 ) -> NDArray[np.complex128]:
-    r"""Apply the local Hamiltonian operator on a tensor A.
-
-    The function contracts the local MPS tensor A with the right environment R, then with the MPO tensor W,
-    and finally with the left environment L, to yield the effective local Hamiltonian action.
+    """Apply the effective single-site Hamiltonian to a local MPS tensor.
 
     Args:
-        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
-        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
-        op (NDArray[np.complex128]): MPO tensor (4-index tensor).
-        ket (NDArray[np.complex128]): Local MPS tensor (3-index tensor).
+        left_env: Left operator environment with shape ``(a, l, A)``.
+        right_env: Right operator environment with shape ``(b, r, B)``.
+        op: MPO tensor with shape ``(o, p, l, r)``.
+        ket: Local tensor with shape ``(p, a, b)``.
 
     Returns:
-        NDArray[np.complex128]: The resulting tensor after applying the local Hamiltonian.
-
+        Updated tensor with shape ``(o, A, B)``. See :func:`build_dense_heff_site`
+        for the equivalent dense operator.
     """
     tensor = np.tensordot(ket, right_env, axes=1)
     tensor = np.tensordot(op, tensor, axes=((1, 3), (0, 2)))
@@ -207,20 +183,16 @@ def project_site(
 def project_bond(
     left_env: NDArray[np.complex128], right_env: NDArray[np.complex128], bond_tensor: NDArray[np.complex128]
 ) -> NDArray[np.complex128]:
-    r"""Apply the "zero-site" bond contraction between two operator blocks L and R using a bond tensor C.
-
-    The contraction is performed in two steps:
-      1. Contract the bond tensor C with the right operator block R.
-      2. Contract the resulting tensor with the left operator block L.
+    """Apply the effective zero-site Hamiltonian to a bond tensor.
 
     Args:
-        left_env (NDArray[np.complex128]): Left operator block (3-index tensor).
-        right_env (NDArray[np.complex128]): Right operator block (3-index tensor).
-        bond_tensor (NDArray[np.complex128]): Bond tensor (2-index tensor).
+        left_env: Left operator environment with shape ``(u, a, p)``.
+        right_env: Right operator environment with shape ``(v, a, w)``.
+        bond_tensor: Bond tensor with shape ``(u, v)``.
 
     Returns:
-        NDArray[np.complex128]: The resulting tensor from the bond contraction.
-
+        Updated bond tensor with shape ``(p, w)``. See :func:`build_dense_heff_bond`
+        for the equivalent dense operator.
     """
     tensor = np.tensordot(bond_tensor, right_env, axes=1)
     return np.asarray(np.tensordot(left_env, tensor, axes=((0, 1), (0, 1))), dtype=np.complex128)
@@ -234,50 +206,23 @@ def build_dense_heff_site(
     right_env: NDArray[np.complex128],  # shape (b, r, B)
     op: NDArray[np.complex128],  # shape (o, p, l, r)
 ) -> NDArray[np.complex128]:
-    r"""Construct the dense effective operator for a single-site Hamiltonian update.
+    """Build the dense operator for :func:`project_site`.
 
-    This function builds the dense matrix representation ``H_eff`` of the linear
-    map implemented by :func:`project_site`.  The operator is defined implicitly by
+    The contraction is::
 
-        Y = project_site(left_env, right_env, op, X),
+        H_eff[o,A,B,p,a,b] = sum_{l,r} op[o,p,l,r] * left_env[a,l,A] * right_env[b,r,B]
 
-    where ``X`` is a local MPS tensor of shape ``(p, a, b)`` and ``Y`` is the
-    resulting tensor of shape ``(o, A, B)``.
-
-    The returned matrix ``H_eff`` satisfies
-
-        vec(Y) = H_eff @ vec(X),
-
-    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
-
-    The dense operator is constructed directly via a single multi-index tensor
-    contraction over the MPO tensor and the left and right operator blocks.
-    This avoids the explicit application of ``project_site`` to each basis
-    vector of the local tensor space and is algebraically equivalent to the
-    generic basis-expansion construction.
+    ``vec(Y) = H_eff @ vec(X)`` uses C-order flattening for input ``(p, a, b)``
+    and output ``(o, A, B)``. The dense matrix alone occupies
+    ``16 * (o*A*B) * (p*a*b)`` bytes; use :func:`project_site` for matrix-free updates.
 
     Args:
-        left_env (NDArray[np.complex128]):
-            Left operator block, a 3-index tensor of shape ``(a, l, A)``.
-        right_env (NDArray[np.complex128]):
-            Right operator block, a 3-index tensor of shape ``(b, r, B)``.
-        op (NDArray[np.complex128]):
-            Local MPO tensor, a 4-index tensor of shape ``(o, p, l, r)``.
+        left_env: Left operator environment with shape ``(a, l, A)``.
+        right_env: Right operator environment with shape ``(b, r, B)``.
+        op: MPO tensor with shape ``(o, p, l, r)``.
 
     Returns:
-        NDArray[np.complex128]:
-            A dense matrix ``H_eff`` of shape ``(o * A * B, p * a * b)`` such that
-            applying ``H_eff @ vec(X)`` reproduces the action of
-            ``project_site(left_env, right_env, op, X)`` exactly.
-
-    Notes:
-        - The index ordering of ``H_eff`` is consistent with NumPy row-major
-          flattening of both input and output tensors.
-        - This function is intended for small local Hilbert spaces, where
-          explicitly materializing the dense effective operator is efficient.
-          For larger local dimensions, the matrix-free projector path should be
-          preferred.
-
+        Complex128 matrix with shape ``(o*A*B, p*a*b)``.
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
@@ -298,46 +243,22 @@ def build_dense_heff_bond(
     left_env: NDArray[np.complex128],  # shape (u, a, p)
     right_env: NDArray[np.complex128],  # shape (v, a, w)
 ) -> NDArray[np.complex128]:
-    r"""Construct the dense effective operator for the bond contraction.
+    """Build the dense operator for :func:`project_bond`.
 
-    This function builds the dense matrix representation ``H_eff`` of the linear
-    map implemented by :func:`project_bond`.  The operator is defined implicitly by
+    The contraction is::
 
-        Y = project_bond(left_env, right_env, C),
+        H_eff[p,w,u,v] = sum_a left_env[u,a,p] * right_env[v,a,w]
 
-    where ``C`` is a bond tensor of shape ``(u, v)`` and ``Y`` is the resulting
-    tensor of shape ``(p, w)``.
-
-    The returned matrix ``H_eff`` satisfies
-
-        vec(Y) = H_eff @ vec(C),
-
-    where ``vec`` denotes NumPy row-major flattening (``reshape(-1)``).
-
-    This implementation constructs ``H_eff`` directly using a single tensor
-    contraction, avoiding the explicit application of ``project_bond`` to each
-    basis vector of the local space.  The result is algebraically equivalent to
-    the generic basis-expansion construction but significantly more efficient.
+    ``vec(Y) = H_eff @ vec(C)`` uses C-order flattening for input ``(u, v)``
+    and output ``(p, w)``. Dense storage requires ``16 * p*w*u*v`` bytes;
+    use :func:`project_bond` for matrix-free updates.
 
     Args:
-        left_env (NDArray[np.complex128]):
-            Left operator block, a 3-index tensor of shape ``(u, a, p)``.
-        right_env (NDArray[np.complex128]):
-            Right operator block, a 3-index tensor of shape ``(v, a, w)``.
+        left_env: Left operator environment with shape ``(u, a, p)``.
+        right_env: Right operator environment with shape ``(v, a, w)``.
 
     Returns:
-        NDArray[np.complex128]:
-            A dense matrix ``H_eff`` of shape ``(p * w, u * v)`` such that
-            applying ``H_eff @ vec(C)`` reproduces the action of
-            ``project_bond(left_env, right_env, C)`` exactly.
-
-    Notes:
-        This function is intended for small local bond dimensions, where
-        explicitly materializing the dense effective operator is efficient and
-        typically faster than repeated tensor contractions inside a Krylov
-        iteration.  For large bond dimensions, the matrix-free projector path
-        should be preferred.
-
+        Complex128 matrix with shape ``(p*w, u*v)``.
     """
     left_env = np.asarray(left_env, dtype=np.complex128)
     right_env = np.asarray(right_env, dtype=np.complex128)
@@ -352,49 +273,21 @@ def _build_dense_effective_operator(
     proj_args: tuple[NDArray[np.complex128], ...],
     tensor_shape: tuple[int, ...],
 ) -> NDArray[np.complex128]:
-    r"""Construct a dense matrix representation of the local effective operator.
+    """Build a dense operator from a local projector.
 
-    The operator is defined implicitly by the projector:
-
-        Y = projector(*proj_args, X)
-
-    where X and Y are local tensors of shape ``tensor_shape``. This function
-    builds the unique dense matrix ``H_eff`` such that:
-
-        vec(Y) = H_eff @ vec(X)
-
-    for every possible local tensor X. This is accomplished by applying the
-    projector to each basis vector ``e_j`` of the flattened local space and
-    storing the resulting column ``vec(Y_j)``. Since the operator is
-    reconstructed directly from the projector, the result is guaranteed to
-    match the behavior of ``project_site`` or ``project_bond`` exactly,
-    independent of index order or contraction details.
+    Uses :func:`build_dense_heff_site` or :func:`build_dense_heff_bond` when
+    applicable; otherwise applies the projector to each local basis tensor.
+    Input and output tensors use C-order flattening.
 
     Args:
-        projector:
-            A function implementing the local operator action, e.g.
-            ``project_site(left_env, right_env, op, ket)`` or
-            ``project_bond(left_env, right_env, bond_tensor)``.
-        proj_args:
-            Extra positional arguments passed to ``projector`` before the tensor X.
-            These typically include the left environment, right environment, and
-            (for ``project_site``) the local MPO tensor.
-        tensor_shape:
-            The shape of the local tensor X. The flattened operator ``H_eff`` will
-            have dimension ``n_loc = prod(tensor_shape)``.
+        projector: Linear map called as ``projector(*proj_args, X)``.
+        proj_args: Arguments preceding the input tensor.
+        tensor_shape: Common shape of input and output tensors.
 
     Returns:
-        NDArray[np.complex128]: A dense matrix of shape ``(n_loc, n_loc)`` such that
-        applying ``H_eff @ vec(X)`` reproduces the action of
-        ``projector(*proj_args, X)`` to machine precision.
-
-    Notes:
-        This method is intended for small local dimensions, where explicitly
-        materializing ``H_eff`` is efficient and typically faster than repeated
-        tensor contractions inside a Krylov iteration. For large local
-        dimensions, the matrix-free path (projector applied directly inside
-        Lanczos) is preferred.
-
+        Complex128 matrix ``H_eff`` with shape ``(n, n)``, where
+        ``n = prod(tensor_shape)``, satisfying ``vec(Y) = H_eff @ vec(X)``.
+        Dense storage requires ``16 * n**2`` bytes, excluding workspace.
     """
     # Fast paths
     if projector is project_site:
@@ -490,10 +383,7 @@ def update_site(
     *,
     krylov_tol: float,
 ) -> NDArray[np.complex128]:
-    """Evolve the local MPS tensor A forward in time using the local Hamiltonian.
-
-    The function flattens tensor A, applies a Lanczos-based approximation of the matrix exponential
-    to evolve it by time dt, and then reshapes the result back to the original tensor shape.
+    """Evolve a local MPS tensor with :func:`project_site` and a Krylov exponential.
 
     Args:
         left_env: Left operator block.
@@ -504,8 +394,7 @@ def update_site(
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
-        The updated MPS tensor after evolution.
-
+        Evolved tensor with the same shape as ``ket``.
     """
     proj_args = (left_env, right_env, op)
     return _evolve_local_tensor_krylov(
@@ -525,10 +414,7 @@ def update_bond(
     *,
     krylov_tol: float,
 ) -> NDArray[np.complex128]:
-    """Evolve the bond tensor C using a Lanczos iteration for the "zero-site" bond contraction.
-
-    The bond tensor C is flattened, evolved via the Krylov subspace approximation of the matrix exponential,
-    and then reshaped back to its original form.
+    """Evolve a bond tensor with :func:`project_bond` and a Krylov exponential.
 
     Args:
         left_env: Left operator block.
@@ -538,8 +424,7 @@ def update_bond(
         krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
 
     Returns:
-        The updated bond tensor after evolution.
-
+        Evolved tensor with the same shape as ``bond_tensor``.
     """
     proj_args = (left_env, right_env)
     return _evolve_local_tensor_krylov(

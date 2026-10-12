@@ -249,7 +249,7 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("missing_reference", [False, True])
 def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool) -> None:
-    """Public aliases link to one complete API page, and missing targets still fail."""
+    """API pages include constructor settings and resolve public aliases and types."""
     pytest.importorskip("sphinx")
     pytest.importorskip("autoapi")
     pytest.importorskip("sphinx_llm.txt")
@@ -271,6 +271,12 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
         "        weight (float): Weight used by the example.\n"
         '    """\n\n'
         "    weight: float = 1.0\n\n"
+        "    def __init__(self, weight: float = 1.0) -> None:\n"
+        '        """Configure the example.\n\n'
+        "        Args:\n"
+        "            weight: Initial weight for sampling.\n"
+        '        """\n'
+        "        self.weight = weight\n\n"
         "    def sample(self, data: NDArray[np.float64], /, *, dtype: type) -> NDArray[np.float64]:\n"
         '        """Return the supplied values.\n\n'
         "        Args:\n"
@@ -340,6 +346,7 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     assert model.count('id="example_api.model.Example"') == 1
     assert model.count('id="example_api.model.Example.weight"') == 1
     assert "Weight used by the example." in model
+    assert "Initial weight for sampling." in model
     assert 'id="example_api.model.helper"' in model
     description = index.split("<p>", 1)[1].split("</p>", 1)[0]
     for member in ("sample", "weight"):
@@ -351,6 +358,7 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     assert 'href="https://example.invalid/types/scalar.html#numpy.float64"' in model
     assert 'href="https://example.invalid/types/type.html#type"' in model
     markdown = (output / "api" / "example_api" / "model" / "index.html.md").read_text()
+    assert "Initial weight for sampling." in markdown
     assert '<abbr title="Positional-only parameter separator (PEP 570)">/</abbr>' in markdown
     assert '<abbr title="Keyword-only parameters separator (PEP 3102)">\\*</abbr>' in markdown
     inventory_module = pytest.importorskip("sphinx.util.inventory")

@@ -5,43 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""High-level :class:`Simulator` class for YAQS.
+"""Run analog, circuit, and analog-digital simulations with :class:`Simulator`.
 
-This module implements the common simulation routine for Hamiltonian (analog) and
-circuit-based simulations as the public :class:`Simulator` class. Analog evolution is
-the primary mode supported by YAQS; circuit (digital) simulation reuses the same
-execution machinery.
-
-The :class:`Simulator` class owns the execution-side configuration (parallel vs.
-serial execution, worker count, progress reporting, multiprocessing context, and
-retry policy), while the physics inputs are passed to :meth:`Simulator.run` as a
-:class:`~mqt.yaqs.core.data_structures.state.State` and either a
-:class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` (analog) or a
-:class:`~qiskit.circuit.QuantumCircuit` (digital) together with a simulation
-parameter object, or as an ordered :class:`~mqt.yaqs.SimulationProgram`.
-Depending on the input type
-(``AnalogSimParams`` or ``DigitalSimParams``), the simulation is
-dispatched to the appropriate backend:
-
-  - For analog simulations, a ``Hamiltonian`` is validated and materialized for the
-    selected state representation, then processed via the analog dispatch. Passing a
-    ``list[State]`` triggers the deterministic unitary ensemble path.
-  - For circuit simulations, a ``QuantumCircuit`` is used and processed via the
-    digital dispatch (observables and/or measurement counts).
-
-The module supports analog (TJM / MCWF / Lindblad / unitary ensemble) and digital
-simulation, including functionality for:
-
-  - Initializing the state (``State``) to a canonical form (B normalized).
-  - Running trajectories with noise (using a provided ``NoiseModel``) and aggregating results.
-  - Parallel execution of trajectories using a ``ProcessPoolExecutor`` with progress reporting via tqdm.
-
-:meth:`Simulator.run` returns a :class:`~mqt.yaqs.core.data_structures.result.Result`
-holding every simulation output (aggregated expectation values, per-trajectory data,
-shared time grid, optional output state, measurement counts, and the sampled noise
-model). Before execution, the simulator normalizes mutable ``*SimParams`` controls
-in place and rebuilds an analog time grid from the current ``elapsed_time`` and
-``dt``. ``Result.sim_params`` references that normalized object.
+State representation and simulation parameters select the solver.
+:class:`~mqt.yaqs.Result` describes the returned outputs and their ordering.
 """
 
 from __future__ import annotations
@@ -1076,28 +1043,12 @@ def _plan_digital_shots(
 # engines based on the sim_params type.
 # ---------------------------------------------------------------------------
 class Simulator:
-    """Public entry point for running YAQS simulations.
+    """Run simulations with reusable execution settings.
 
-    A :class:`Simulator` owns the execution-side configuration: how trajectories
-    are parallelized, how many workers to use, whether to display a progress bar,
-    which multiprocessing context to use, and the retry policy for transient
-    errors in process pool workers. The physics inputs (initial state, operator, simulation
-    parameters, optional noise model) are passed per call to :meth:`run`.
-
-    Multiple :meth:`run` calls share the same configuration. A call constructs
-    a short-lived process pool when ``parallel=True`` and both the job count
-    and ``max_workers`` exceed one. Other calls run in the current process.
-    A worker cap of one with ``parallel=True`` also limits numerical threads to one.
-
-    Attributes:
-        parallel: Whether to use a process pool for multiple jobs and workers.
-        max_workers: Maximum number of worker processes when ``parallel=True``.
-            Defaults to ``max(1, available_cpus() - 1)``.
-        show_progress: Whether to display trajectory and shot-readout progress bars.
-        mp_context: Multiprocessing context: ``"auto"`` (default), ``"fork"``,
-            or ``"spawn"``. ``"auto"`` selects ``"forkserver"`` on Linux and ``"spawn"`` elsewhere.
-        max_retries: Maximum retry attempts for transient errors in process pool workers.
-        retry_exceptions: Exception types that trigger a retry in a process pool.
+    Pass states, operators, and simulation parameters to :meth:`run`.
+    A process pool is used when ``parallel=True`` and both the job count and
+    worker cap exceed one. A cap of one also limits numerical threads to one
+    when parallel execution is enabled.
     """
 
     def __init__(
@@ -1110,16 +1061,17 @@ class Simulator:
         max_retries: int = 10,
         retry_exceptions: tuple[type[BaseException], ...] = (CancelledError, TimeoutError, OSError),
     ) -> None:
-        """Initialize the simulator with execution-side configuration.
+        """Configure execution, progress reporting, and worker retries.
 
         Args:
-            parallel: Enable a process pool when both the job count and worker cap exceed one.
-            max_workers: Positive worker-process cap. ``None`` (default) resolves to
-                ``max(1, available_cpus() - 1)``. A cap of one runs in the current process.
-            show_progress: Whether to display trajectory and shot-readout progress bars.
-            mp_context: Multiprocessing start method (``"auto"``, ``"fork"``, or ``"spawn"``).
-            max_retries: Non-negative maximum retries for transient errors in process pool workers.
-            retry_exceptions: Exception types that trigger a retry in a process pool.
+            parallel: Enable a process pool for multiple jobs and workers.
+            max_workers: Positive worker-process cap. ``None`` selects
+                ``max(1, available_cpus() - 1)``; one runs in the current process.
+            show_progress: Display trajectory and shot-readout progress bars.
+            mp_context: ``"auto"``, ``"fork"``, or ``"spawn"``. Automatic selection
+                uses ``"forkserver"`` on Linux and ``"spawn"`` elsewhere.
+            max_retries: Non-negative retry limit for transient process-pool errors.
+            retry_exceptions: Exception types that trigger a process-pool retry.
         """
         self._execution = ExecutionConfig(
             parallel=parallel,
@@ -1199,44 +1151,35 @@ class Simulator:
         random_seed: int | None = None,
         get_state: bool = False,
     ) -> Result:
-        """Execute the common simulation routine for Hamiltonian (analog) and circuit simulations.
+        """Run Hamiltonian evolution, a circuit, or an ordered simulation program.
 
-        Dispatches the simulation to the appropriate backend based on the type of simulation
-        parameters provided. For analog simulations, the
-        :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` and ``State`` are
-        materialized for the active representation as needed (``list[State]`` triggers the
-        deterministic unitary ensemble path). For circuit-based simulations, the initial
-        :class:`~mqt.yaqs.core.data_structures.state.State` must use ``representation="mps"``.
+        Analog runs support MPS, vector, and density-matrix states. Circuits and
+        programs require a single MPS state. A list of MPS states selects noiseless
+        analog ensemble evolution.
 
         Args:
-            initial_state: The initial state as a :class:`~mqt.yaqs.core.data_structures.state.State`,
-                or a list of states for deterministic analog unitary ensemble evolution
-                (``AnalogSimParams`` only).
-            operator: :class:`~mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian` for analog
-                simulations; a :class:`~qiskit.circuit.QuantumCircuit`, raw QASM ``str``, or
-                ``Path`` for digital simulation; a :class:`~mqt.yaqs.SimulationProgram`; or a
-                sequence of ``(operator, params)`` pairs that is wrapped as a program.
-            sim_params: Simulation parameters specifying a standalone simulation's mode
-                and settings. Must be omitted for a ``SimulationProgram`` or pair list.
-            noise_model: The run-level noise model. For a standalone simulation
-                or program, distribution-valued strengths are sampled once at
-                the beginning of the run. Program segments inherit this model
-                unless they provide an explicit override.
-            observables: Program-wide observables when ``operator`` is a pair list.
-            num_traj: Program-wide trajectory count when ``operator`` is a pair list.
-            random_seed: Program-wide seed when ``operator`` is a pair list.
-            get_state: Retain the final state when ``operator`` is a pair list.
+            initial_state: A :class:`~mqt.yaqs.State`, or a list for analog ensemble evolution.
+            operator: :class:`~mqt.yaqs.Hamiltonian`, :class:`~qiskit.circuit.QuantumCircuit`,
+                QASM source or path, :class:`~mqt.yaqs.SimulationProgram`, or segment tuples
+                ``(operator, params)`` or ``(operator, params, noise_override)``.
+            sim_params: Required for a standalone run; omit for a program or segment list.
+            noise_model: Run-level noise. Distribution-valued strengths are sampled once.
+                Program segments inherit this model unless they supply an override.
+            observables: Program-wide observables for a segment list.
+            num_traj: Program-wide trajectory count for a segment list.
+            random_seed: Program-wide seed for a segment list.
+            get_state: Retain the final state for a segment list.
 
         Returns:
-            A :class:`~mqt.yaqs.core.data_structures.result.Result` holding all
-            simulation outputs. Validation normalizes mutable ``sim_params``
-            controls in place; ``Result.sim_params`` references that object.
+            :class:`~mqt.yaqs.Result` with the requested outputs. Standalone parameter
+            controls are normalized in place and the analog time grid is rebuilt.
+            ``Result.sim_params`` references the same parameter object.
 
         Raises:
-            ValueError: If no output is specified (neither observables, shots, nor ``get_state``),
-                or the requested observables are unsupported by the selected representation.
-            TypeError: If ``sim_params`` is missing for a standalone run, supplied for a
-                program, or the initial state is incompatible with the selected mode.
+            ValueError: If a standalone run requests no output, controls are invalid,
+                or the representation does not support the requested observables.
+            TypeError: If parameters are missing for a standalone run, supplied for
+                a program, or incompatible with the initial state or operator.
         """
         program_kwargs_set = observables is not None or num_traj is not None or random_seed is not None or get_state
         if (
@@ -1469,9 +1412,8 @@ class Simulator:
     ) -> None:
         """Run analog simulation trajectories for Hamiltonian evolution.
 
-        Selects the appropriate analog simulation backend based on ``sim_params.order``
-        (either one-site or two-site evolution) and runs the simulation trajectories for the given
-        Hamiltonian. The trajectories are executed and the results are aggregated.
+        Selects TJM, MCWF, or Lindblad from the state representation and aggregates
+        trajectory results. ``sim_params.order`` selects first- or second-order TJM.
 
         A ``list[State]`` ``initial_state`` triggers the deterministic unitary ensemble
         path via :meth:`_run_ensemble`.
@@ -1930,7 +1872,8 @@ class Simulator:
         Args:
             initial_states: One MPS per ensemble member; lengths must match ``operator.length``.
             operator: Hamiltonian as an MPO shared by all members.
-            sim_params: Analog parameters; ``num_traj`` is set to ``len(initial_states)``.
+            sim_params: Analog parameters. The ensemble size determines the local
+                trajectory count without changing ``num_traj``.
             noise_model: Must be absent or contain only zero-strength processes.
             result: Output container populated during this run.
 

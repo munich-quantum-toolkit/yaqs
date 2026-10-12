@@ -99,30 +99,27 @@ def run_optimization_characterization(
     vector_max_qubits: int = DEFAULT_VECTOR_MAX_QUBITS,
     **optimizer_kwargs: Any,
 ) -> NoiseCharacterizationResult:
-    """Fit noise strengths by analytical trajectory matching and CMA-ES.
+    """Fit noise strengths by matching observable trajectories.
 
     Args:
         hamiltonian: System Hamiltonian.
-        sim_params: Analog simulation parameters.
+        sim_params: Analog simulation settings.
         init_state: Initial state.
-        init_guess: Initial noise guess.
-        observables: Fitting observables whose trajectories are matched.
+        init_guess: Initial noise model.
+        observables: Fitting observables, in reference-row order.
         x_low: Lower parameter bounds.
         x_up: Upper parameter bounds.
-        reference_model: Optional reference model to simulate target trajectories.
-        ref_expectations: Optional experimental trajectories with shape ``(n_obs, n_times)``.
-        execution: Parallel execution configuration.
+        reference_model: Noise model used to generate reference trajectories.
+        ref_expectations: Measured trajectories with shape ``(n_obs, n_times)``.
+        execution: Parallel execution settings.
         representation: Forward-model selection.
-        lindblad_max_qubits: Auto cutover to Lindblad evolution.
-        vector_max_qubits: Auto cutover from MCWF to TJM.
-        **optimizer_kwargs: Keyword arguments forwarded to the optimizer.
-            ``max_iter`` limits CMA-ES generations or the bounded scalar
-            search's evaluation count (SciPy can evaluate twice with a limit of
-            one). The separate initial-model and final fitted-trajectory
-            evaluations are excluded.
+        lindblad_max_qubits: Automatic cutover to Lindblad evolution.
+        vector_max_qubits: Automatic cutover from MCWF to TJM.
+        **optimizer_kwargs: Settings and budget defined by
+            :func:`~mqt.yaqs.characterization.noise.backends.cma.cma_opt`.
 
     Returns:
-        Structured optimization result including optional trajectory arrays.
+        Optimization result with fitted and reference trajectories.
     """
     _validate_simulation_controls(sim_params)
     initial_parameters = np.array([proc["strength"] for proc in init_guess.processes], dtype=float)

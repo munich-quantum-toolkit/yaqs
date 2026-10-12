@@ -5,4 +5,4 @@
 #
 # Licensed under the MIT License
 
-"""YAQS's TDVP-based quantum circuit simulator."""
+"""MPS circuit simulation and circuit equivalence-checking kernels."""

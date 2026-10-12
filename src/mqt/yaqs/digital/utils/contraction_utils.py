@@ -528,8 +528,8 @@ def iterate(
         dag2 (DAGCircuit): The second circuit's DAGCircuit.
         threshold (float): The SVD truncation threshold used during decomposition.
         parallel: If True, parallelize tensor updates within checkerboard sweeps.
-        max_workers: Worker process count when ``parallel`` is True.
-        mp_context: Multiprocessing context for the process pool.
+        max_workers: Maximum worker thread count when ``parallel`` is True.
+        mp_context: Reserved multiprocessing setting; unused by these thread-based sweeps.
     """
     length = mpo.length
 

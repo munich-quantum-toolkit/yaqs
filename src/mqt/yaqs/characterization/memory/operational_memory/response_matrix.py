@@ -89,8 +89,9 @@ def compute_spectrum(
         response_matrix: Response matrix with future-response rows and history columns. Left
             singular vectors describe future-response directions; right singular vectors
             describe combinations of histories.
-        discarded_weight_threshold: Relative tail weight above which singular values are
-            discarded when computing entropy. ``None`` keeps the full spectrum.
+        discarded_weight_threshold: Maximum fraction of total squared singular-value
+            weight allowed in the discarded tail when computing entropy.
+            ``None`` keeps the full spectrum.
         min_keep: Minimum number of singular values to retain after tail truncation.
 
     Returns:

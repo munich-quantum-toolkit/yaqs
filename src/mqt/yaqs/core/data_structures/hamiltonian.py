@@ -369,10 +369,13 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Transverse-field Ising Hamiltonian with finite-real coefficients.
+        """Build the transverse-field Ising Hamiltonian with negative ZZ and X terms.
+
+        :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.ising` defines the coefficients,
+        boundary conditions, and compression settings.
 
         Returns:
-            A :class:`Hamiltonian` wrapping the constructed MPO.
+            Hamiltonian wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.ising(
@@ -402,10 +405,13 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Heisenberg Hamiltonian with finite-real coefficients.
+        """Build the XYZ Heisenberg Hamiltonian with negative XX, YY, ZZ, and Z terms.
+
+        :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.heisenberg` defines the
+        coefficients, boundary conditions, and compression settings.
 
         Returns:
-            A :class:`Hamiltonian` wrapping the constructed MPO.
+            Hamiltonian wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.heisenberg(
@@ -435,10 +441,13 @@ class Hamiltonian:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> Hamiltonian:
-        """Pauli-string Hamiltonian with finite-real term coefficients.
+        """Build a Hamiltonian from one- and nearest-neighbor two-body Pauli terms.
+
+        :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.pauli` defines term tuples,
+        boundary conditions, and compression settings. Coefficients must be finite and real.
 
         Returns:
-            A :class:`Hamiltonian` wrapping the constructed MPO.
+            Hamiltonian wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.pauli(
@@ -462,10 +471,15 @@ class Hamiltonian:
         *,
         jordan_wigner: bool = False,
     ) -> Hamiltonian:
-        """1D Fermi-Hubbard Hamiltonian with finite-real physical parameters.
+        """Build a 1D Fermi-Hubbard Hamiltonian with negative hopping and on-site interaction.
+
+        ``length`` counts dimension-four lattice sites by default. With
+        ``jordan_wigner=True``, it counts dimension-two spin orbitals and must be
+        even and at least two. :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.fermi_hubbard_1d`
+        defines the basis, signs, and fermionic conventions.
 
         Returns:
-            A :class:`Hamiltonian` wrapping the constructed MPO.
+            Hamiltonian wrapping the constructed MPO.
         """
         return cls.from_mpo(MPO.fermi_hubbard_1d(length, t=t, u=u, jordan_wigner=jordan_wigner))
 
@@ -480,10 +494,13 @@ class Hamiltonian:
         anharmonicity: float,
         coupling: float,
     ) -> Hamiltonian:
-        """Coupled transmon-resonator chain with finite-real physical parameters.
+        """Build an alternating transmon-resonator chain with dipole coupling.
+
+        :meth:`~mqt.yaqs.core.data_structures.mpo.MPO.coupled_transmon` defines the
+        Duffing terms, site dimensions, and physical coefficients.
 
         Returns:
-            A :class:`Hamiltonian` wrapping the constructed MPO.
+            Hamiltonian wrapping the constructed MPO.
         """
         return cls.from_mpo(
             MPO.coupled_transmon(

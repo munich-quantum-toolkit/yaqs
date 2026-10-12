@@ -5,13 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Dissipative sweep of the Tensor Jump Method.
-
-This module implements a function to apply dissipation to a quantum state represented as an MPS.
-The dissipative operator is computed from a noise model by exponentiating a weighted sum of jump operators,
-and is then applied to each tensor in the MPS via tensor contraction. If no noise is present or if all
-noise strengths are zero, the MPS is simply shifted to its canonical form.
-"""
+"""No-jump dissipation for MPS Tensor Jump Method trajectories."""
 
 from __future__ import annotations
 
@@ -53,28 +47,21 @@ def apply_dissipation(
     dt: float,
     sim_params: AnalogSimParams | DigitalSimParams,
 ) -> None:
-    """Apply dissipation to the system state using a given noise model and time step.
+    """Apply no-jump dissipation in place and leave the MPS center at site zero.
 
-    This function modifies the state tensors of an MPS by applying a dissipative operator
-    that is calculated from the noise model's jump operators and strengths. The operator is
-    computed by exponentiating a matrix derived from these jump operators, and then applied to
-    each tensor in the state using an Einstein summation contraction.
+    Applies ``exp(-0.5 * dt * sum(gamma * L†L))`` for each local support group.
+    Supports one-site and adjacent two-site operators, plus long-range Pauli
+    products. Active dissipation retains the norm loss. With no active noise,
+    establishes the center at zero and also normalizes a tracked center.
 
     Args:
-        state: The Matrix Product State (MPS) representing the current state of the system.
-        noise_model: The noise model containing jump operators and their
-            corresponding strengths. If None or if all strengths are zero, no dissipation is applied.
-        dt: The time step for the evolution, used in the exponentiation of the dissipative operator.
-        sim_params: Simulation parameters that include settings.
+        state: MPS updated in place.
+        noise_model: Noise model with concrete rates, or ``None``.
+        dt: Dissipative evolution interval.
+        sim_params: Truncation settings for adjacent two-site updates.
 
-    Notes:
-        - If no noise is present (i.e. `noise_model` is None or all noise strengths are zero),
-          the function shifts the orthogonality center of the MPS tensors and returns early.
-        - The dissipation operator A is calculated as a sum over each jump operator, where each
-          term is given by (noise strength) * (conjugate transpose of the jump operator) multiplied
-          by the jump operator.
-        - The dissipative operator is computed using the matrix exponential `expm(-0.5 * dt * A)`.
-        - The operator is then applied to each tensor in the MPS via a contraction using `opt_einsum`.
+    Raises:
+        NotImplementedError: If a long-range two-site process is not a Pauli product.
     """
     if noise_model is None or all(proc["strength"] == 0 for proc in noise_model.processes):
         if state.orthogonality_center is not None:

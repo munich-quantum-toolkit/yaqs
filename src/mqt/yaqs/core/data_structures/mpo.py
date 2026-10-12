@@ -129,50 +129,14 @@ def _prepare_mpo_tensors(
 
 
 class MPO:
-    """Matrix Product Operator (MPO) for YAQS tensor-network simulations.
+    """Represent a lattice operator as a chain of local tensors.
 
-    An MPO represents a linear operator on a 1D lattice as a chain of local tensors.
-    YAQS stores each site tensor with index order::
+    Each tensor has axes ``(physical_out, physical_in, bond_left, bond_right)``.
+    Dense conversions use site zero as the least-significant subsystem, matching
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
 
-        (phys_out, phys_in, chi_left, chi_right)
-
-    where ``phys_out``/``phys_in`` are the physical operator legs and
-    ``chi_left``/``chi_right`` are the virtual (bond) dimensions.
-
-    **Construction**
-
-    Use classmethod factories to build common Hamiltonians or custom operators:
-
-    - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
-    - ``MPO.pauli(...)``: generic one-/two-body Pauli interactions.
-    - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
-    - ``MPO.trapped_ion(...)``: one or two trapped ions on a position grid.
-    - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
-    - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
-    - ``MPO.identity(...)``: identity operator.
-    - ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
-
-    **Operations**
-
-    - ``from_gate(...)``: build an MPO from a two-qubit gate on a chain (optionally identity-padded).
-    - ``multiply(MPS)`` / ``multiply(MPO)``: apply this MPO to an MPS or left-multiply into another MPO.
-    - ``compress(...)``: SVD-based bond compression sweeps.
-    - ``rotate(...)``: swap physical legs (optionally conjugating).
-
-    **Conversion / checks**
-
-    - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix. Dense
-      matrices use site ``0`` as the least-significant subsystem, matching
-      :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
-    - ``compute_schmidt_spectrum()`` / ``compute_entanglement_entropy()``: operator bond diagnostics.
-    - ``compute_identity_fidelity()``: normalized overlap with the identity.
-    - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
-    - ``check_if_identity(...)``: heuristic identity check (qubit systems).
-
-    **Notes**
-
-    Some constructors (e.g. Pauli-string builders) currently require
-    ``physical_dimension == 2``.
+    Factories build common Hamiltonians and gates on two or more qubits.
+    :meth:`custom` accepts tensor data; Pauli builders require local dimension two.
     """
 
     _PAULI_2: ClassVar[dict[str, np.ndarray]] = {
@@ -538,27 +502,27 @@ class MPO:
 
         Without ``jordan_wigner``, builds the standard fermionic MPO on sites with
         local dimension 4. The single-site basis is
-        :math:`|0\\rangle, |\\!\\downarrow\\rangle, |\\!\\uparrow\\rangle, |\\!\\uparrow\\downarrow\\rangle`
-        (NumPy ``kron`` ordering for :math:`|\\!\\uparrow\\rangle \\otimes |\\!\\downarrow\\rangle`).
+        :math:`|0\rangle, |\!\downarrow\rangle, |\!\uparrow\rangle, |\!\uparrow\downarrow\rangle`
+        (NumPy ``kron`` ordering for :math:`|\!\uparrow\rangle \otimes |\!\downarrow\rangle`).
         The Hamiltonian is
-        :math:`H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\mathrm{h.c.})
-        + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}`.
+        :math:`H = -t \sum_{i,\sigma} (c^\dagger_{i,\sigma} c_{i+1,\sigma} + \mathrm{h.c.})
+        + U \sum_i n_{i,\uparrow} n_{i,\downarrow}`.
 
         With ``jordan_wigner=True``, builds the Jordan-Wigner Pauli-string MPO on an
         interleaved spin chain 1↑, 1↓, 2↑, 2↓, ... (local dimension 2):
 
         .. math::
 
-            U n_{i,\\uparrow} n_{i,\\downarrow}
-            = \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
-            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
+            U n_{i,\uparrow} n_{i,\downarrow}
+            = \frac{U}{4} \left(I - Z_{i,\uparrow} - Z_{i,\downarrow}
+            + Z_{i,\uparrow} Z_{i,\downarrow}\right)
 
-            H = \\sum_i \\frac{U}{4} \\left(I - Z_{i,\\uparrow} - Z_{i,\\downarrow}
-            + Z_{i,\\uparrow} Z_{i,\\downarrow}\\right)
-            - \\frac{t}{2} \\sum_i \\left( X_{\\uparrow,i} Z_{\\downarrow,i} X_{\\uparrow,i+1}
-            + Y_{\\uparrow,i} Z_{\\downarrow,i} Y_{\\uparrow,i+1} \\right)
-            - \\frac{t}{2} \\sum_i \\left( X_{\\downarrow,i} Z_{\\uparrow,i+1} X_{\\downarrow,i+1}
-            + Y_{\\downarrow,i} Z_{\\uparrow,i+1} Y_{\\downarrow,i+1} \\right)
+            H = \sum_i \frac{U}{4} \left(I - Z_{i,\uparrow} - Z_{i,\downarrow}
+            + Z_{i,\uparrow} Z_{i,\downarrow}\right)
+            - \frac{t}{2} \sum_i \left( X_{\uparrow,i} Z_{\downarrow,i} X_{\uparrow,i+1}
+            + Y_{\uparrow,i} Z_{\downarrow,i} Y_{\uparrow,i+1} \right)
+            - \frac{t}{2} \sum_i \left( X_{\downarrow,i} Z_{\uparrow,i+1} X_{\downarrow,i+1}
+            + Y_{\downarrow,i} Z_{\uparrow,i+1} Y_{\downarrow,i+1} \right)
 
         Without ``jordan_wigner``, the MPO uses fermionic ladder operators on composite
         dimension-4 sites (hard-core constraint per site). Inter-site algebra matches
@@ -808,7 +772,7 @@ class MPO:
 
         Notes:
             - The Hamiltonian for each site is modeled as a Duffing oscillator:
-                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) + J * (adag_i a_{i+1} + h.c.)
+                H = sum_i ω * n_i + U/2 * n_i (n_i - 1) - J * (adag_i a_{i+1} + h.c.)
             - The MPO bond dimension is D=4.
         """
         if length <= 0:
@@ -1146,28 +1110,22 @@ class MPO:
         *,
         physical_dimensions: list[int] | tuple[int, ...] | None = None,
     ) -> MPO:
-        """Build an MPO for a gate on two or more qubits on a chain.
+        """Build an MPO for a gate on two or more qubits.
 
-        When ``chain_length`` equals the gate support size, the MPO contains only the
-        extended gate tensors. When ``chain_length`` is larger, identity MPO sites are
-        placed outside the support interval ``[min(sites), max(sites)]``.
-
-        Reuses :attr:`~mqt.yaqs.core.libraries.gate_library.BaseGate.mpo_tensors` when
-        already populated for the gate support.
+        A support window spans ``min(sites)`` through ``max(sites)``, including
+        spectators. A full-chain MPO adds identity tensors outside that window.
 
         Args:
-            gate: Gate on two or more qubits with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
-            chain_length: Total number of MPO sites (support length or full MPS length).
-            physical_dimensions: Optional local dimension for every chain site.
-                This permits qubit gates whose support crosses non-qubit spectators.
+            gate: Gate with sites and either its tensor or MPO tensors set.
+            chain_length: Number of sites in the support window or full chain.
+            physical_dimensions: Optional local dimensions for all chain sites,
+                including non-qubit spectators.
 
         Returns:
-            MPO ready for :meth:`multiply` on an MPS or another MPO.
+            Gate MPO for :meth:`multiply`.
 
         Raises:
-            ValueError: If the gate acts on fewer than two qubits, the number of sites does not
-                match the interaction level, ``chain_length`` is too small, or the sites lie
-                outside the chain.
+            ValueError: If gate support or chain length is invalid, or fewer than two qubits are given.
         """
         if gate.interaction < 2:
             msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
@@ -1302,30 +1260,21 @@ class MPO:
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> None:
-        """Build this MPO from a sum of Pauli-string terms.
+        """Build this MPO in place from a sum of Pauli-string terms.
 
-        Each term is given as ``(coeff, spec)`` where ``spec`` is a string like
-        ``"Z0 Z1"``, ``"X7"``, or ``""`` for the identity. Terms are assembled by
-        constructing a finite state machine (FSM) that represents the sum of terms
-        directly, resulting in an optimal or near-optimal bond dimension without
-        intermediate compression steps.
+        A finite state machine combines the terms before optional SVD compression.
 
         Args:
-            terms: List of ``(coefficient, spec)`` Pauli terms.
-            length: Number of sites (L).
-            physical_dimension: Local dimension (only ``2`` is supported).
-            tol: SVD truncation threshold used during final compression.
-            max_bond_dim: Optional hard cap on the kept MPO bond dimension.
-            n_sweeps: Number of compression sweeps (>= 0).
+            terms: ``(coefficient, spec)`` pairs; examples of ``spec`` are
+                ``"Z0 Z1"``, ``"X7"``, and ``""`` for the identity.
+            length: Number of sites.
+            physical_dimension: Local dimension; only two is supported.
+            tol: SVD threshold for final compression.
+            max_bond_dim: Optional hard cap on the kept bond dimension.
+            n_sweeps: Non-negative number of compression sweeps.
 
         Raises:
-            ValueError: If ``length <= 0``, ``physical_dimension != 2``, a site index is
-                out of bounds, an operator label is invalid, or a term spec is malformed.
-
-        Notes:
-            The resulting MPO represents the sum of all provided terms (including
-            coefficients). The construction uses an FSM approach which is significantly
-            faster than summing individual MPOs for large numbers of terms.
+            ValueError: If length, local dimension, site indices, or term specifications are invalid.
         """
         if physical_dimension != 2:
             msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
@@ -1435,9 +1384,8 @@ class MPO:
             self.tensors.append(tensor)
 
         # 4. Final Compression
-        #    The FSM construction is optimal for one-sided (suffix) uniqueness.
-        #    A standard two-sweep compression ("lr_rl") puts the MPO in canonical form
-        #    and removes any remaining redundancies (e.g., common prefixes).
+        #    Compress shared prefixes left after suffix merging, within the
+        #    configured tolerance, rank cap, and sweep count.
         self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 

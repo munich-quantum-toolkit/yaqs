@@ -335,13 +335,11 @@ def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
 
 
 def apply_single_qubit_gate(state: MPS, node: DAGOpNode) -> None:
-    """Apply single qubit gate.
+    """Apply a single-qubit DAG operation to the MPS in place.
 
-    This function applies a single-qubit gate to the MPS, used during circuit simulation.
-
-    Parameters:
-    state (MPS): The matrix product state (MPS) representing the quantum state.
-    node (DAGOpNode): The directed acyclic graph (DAG) operation node representing the gate to be applied.
+    Args:
+        state: MPS with a qubit at the operation's site.
+        node: DAG node containing the gate.
     """
     gate = convert_dag_to_tensor_algorithm(node)[0]
     _validate_gate_layout(gate, tuple(state.physical_dimensions), None)
@@ -353,19 +351,15 @@ def construct_generator_mpo(
     length: int,
     physical_dimensions: tuple[int, ...] | list[int] | None = None,
 ) -> tuple[MPO, int, int]:
-    """Construct Generator MPO.
-
-    Constructs a Matrix Product Operator (MPO) representation of a generator for a given gate over a
-    specified length. The generator is a list with one 2x2 product factor per site, ordered as
-    ``gate.sites``; identity factors are placed on all other sites.
+    """Build a product-generator MPO with identities on spectator sites.
 
     Args:
-        gate: The gate containing the generator and the sites it acts on.
-        length: The total number of sites in the system.
-        physical_dimensions: Local dimensions used for spectator identities.
+        gate: Bound gate with one 2x2 generator factor per entry of ``gate.sites``.
+        length: Total chain length.
+        physical_dimensions: Local dimensions for spectator identities.
 
     Returns:
-        A tuple containing the constructed MPO, the first site index, and the last site index.
+        Generator MPO and the first and last gate sites in chain order.
     """
     factors = dict(zip(gate.sites, gate.generator, strict=True))
     first_site = min(gate.sites)
@@ -385,19 +379,18 @@ def construct_generator_mpo(
 
 
 def apply_window(state: MPS, mpo: MPO, first_site: int, last_site: int, window_size: int) -> tuple[MPS, MPO, list[int]]:
-    """Apply Window.
-
-    Apply a window to the given MPS and MPO for a local update.
+    """Extract an MPS/MPO window with the center at its first site.
 
     Args:
-        state (MPS): The matrix product state (MPS) to be updated.
-        mpo (MPO): The matrix product operator (MPO) to be applied.
-        first_site (int): The index of the first site in the window.
-        last_site (int): The index of the last site in the window.
-        window_size: Number of sites on each side of first and last site
+        state: MPS whose gauge is changed in place; window tensors share its data.
+        mpo: Operator with the same chain layout.
+        first_site: First gate site.
+        last_site: Last gate site.
+        window_size: Number of spectator sites to include on each side, clipped
+            at the chain boundaries.
 
     Returns:
-        tuple[MPS, MPO, list[int]]: A tuple containing the shortened MPS, the shortened MPO, and the window indices.
+        Window MPS, window MPO, and inclusive ``[start, end]`` indices.
     """
     # Define a window for a local update.
     window = [first_site - window_size, last_site + window_size]
@@ -437,26 +430,22 @@ def apply_two_qubit_gate_tdvp(
     gate: BaseGate,
     sim_params: DigitalSimParams,
 ) -> tuple[int, int]:
-    """Apply a gate via generator MPO and TDVP.
+    """Apply a product-generator gate by two-site TDVP in place.
 
-    Gates use local two-site TDVP (2TDVP) on a window-local MPS without post-sweep
-    renormalization before grafting tensors back into the full chain. Numerical-null
-    workspace is pruned on the gate's final split. Nearest-neighbor two-qubit gates
-    in hybrid ``gate_mode="tdvp"`` use TEBD instead; callers should route via
-    :func:`apply_two_qubit_gate`. The window spans the full gate support, so the
-    function applies to any gate with a product-form generator.
+    The window spans the gate support and neighboring sites. Gauge metadata
+    follows the evolved window. Use :func:`apply_two_qubit_gate` to select
+    the configured gate method, including TEBD for adjacent gates in hybrid mode.
 
     Args:
         state: MPS updated in place.
-        gate: Internal gate object from the gate library.
-        sim_params: Truncation and Krylov settings for TDVP.
+        gate: Bound gate with a product-form generator, on two or more qubits.
+        sim_params: TDVP, truncation, and Krylov settings.
 
     Returns:
-        ``(first_site, last_site)`` spanning the gate support in MPS order.
+        ``(first_site, last_site)`` spanning the gate support in chain order.
 
     Raises:
-        ValueError: If ``sim_params.tdvp_mode`` is not ``"2site"``.
-
+        ValueError: If ``tdvp_mode`` is not ``"2site"``.
     """
     if sim_params.tdvp_mode != "2site":
         msg = f'apply_two_qubit_gate_tdvp only supports tdvp_mode="2site"; got {sim_params.tdvp_mode!r}.'
@@ -466,6 +455,8 @@ def apply_two_qubit_gate_tdvp(
     window_size = 1
     short_state, short_mpo, window = apply_window(state, mpo, first_site, last_site, window_size)
 
+    # The window sweep prunes null workspace on its final split and defers
+    # drift normalization until the tensors are back in the full chain.
     evolve_window(short_state, short_mpo, sim_params)
     for i in range(window[0], window[1] + 1):
         state.tensors[i] = short_state.tensors[i - window[0]]
@@ -473,7 +464,7 @@ def apply_two_qubit_gate_tdvp(
         state.set_center(window[0] + short_state.orthogonality_center)
     else:
         state.set_center(None)
-    # After the graft, so that a drift renormalization's own gauge is the one recorded.
+    # Normalize after restoring the window's center in full-chain coordinates.
     if uses_fixed_chi(sim_params):
         renorm_drift(state, sim_params)
 
@@ -487,27 +478,21 @@ def apply_two_qubit_gate_tebd(
     *,
     svd_distribution: SvdDistribution = "right",
 ) -> tuple[int, int]:
-    """Apply a two-qubit gate via TEBD/SVD, inserting adjacent SWAPs if needed.
+    """Apply a two-qubit gate in place with a canonical two-site SVD split.
 
-    The orthogonality center is moved onto the gate pair before the two-site split,
-    so the SVD truncation is performed in a canonical gauge. Truncating in any other
-    gauge is not equivalent to discarding the smallest Schmidt values of the state and
-    can leave errors far above the optimal truncation error at the same bond dimension.
-
-    ``svd_distribution`` applies only to the adjacent SVD, including each SWAP step of
-    a long-range route. A long-range gate chooses ``"left"`` on the descending SWAP
-    pass and ``"right"`` on the transported gate and the return pass, so a
-    caller-supplied distribution is not used for the route as a whole.
+    Moves the center onto the gate pair before truncation. Long-range gates use
+    adjacent SWAPs, absorbing singular values left on the descending pass and
+    right for the gate and return pass.
 
     Args:
         state: MPS updated in place.
-        gate: Internal gate object from the gate library.
-        sim_params: Truncation settings shared with TDVP/MPS splitting.
-        svd_distribution: Side the singular values are absorbed into after an
-            adjacent split, which is where the split leaves the center.
+        gate: Bound two-qubit gate.
+        sim_params: SVD truncation settings.
+        svd_distribution: Side receiving singular values and the center for an
+            adjacent split; long-range routing chooses its own distributions.
 
     Returns:
-        ``(left_site, right_site)`` spanning the gate support in MPS order.
+        ``(left_site, right_site)`` spanning the gate support in chain order.
     """
 
     def apply_swap(site_left: int, swap_distribution: SvdDistribution) -> None:

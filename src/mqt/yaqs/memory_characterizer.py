@@ -223,24 +223,11 @@ def _matches_process_tensor(target: Any) -> bool:
 
 
 class MemoryCharacterizer:
-    """Entry point for operational memory workflows.
+    """Characterize environmental memory and predict controlled dynamics.
 
-    **Build:** :meth:`train`, :meth:`sample` (advanced), :meth:`build_process_tensor`
-
-    **Use:** :meth:`predict` (surrogate or reference process-tensor dynamics), :meth:`characterize` (memory metrics),
-    :meth:`compute_qmi`, :meth:`compute_cmi` (reference process-tensor information metrics)
-
-    Hamiltonian-based workflows currently support qubit Hamiltonians only.
-
-    Attributes:
-        parallel: Whether sequence simulations run in parallel via a process pool.
-        max_workers: Maximum worker processes when ``parallel=True``.
-        show_progress: Whether to display a tqdm progress bar.
-        representation: ``"vector"`` (MCWF), ``"mps"`` (TJM), or ``"auto"``.
-        vector_max_qubits: Auto cutover: vector up to this many qubits, then mps.
-        mp_context: Multiprocessing context.
-        max_retries: Maximum retry attempts for transient worker errors.
-        retry_exceptions: Exception types that trigger a retry.
+    Use :meth:`characterize` for memory diagnostics, :meth:`build_process_tensor`
+    for reference models, and :meth:`train` for surrogates used by :meth:`predict`.
+    Hamiltonian workflows support qubits only.
     """
 
     def __init__(
@@ -261,7 +248,8 @@ class MemoryCharacterizer:
             parallel: Boolean that enables parallel sequence simulation.
             max_workers: Positive worker-process cap, or ``None`` for the default.
             show_progress: Boolean that controls tqdm progress bars.
-            representation: ``"vector"``, ``"mps"``, or ``"auto"`` stochastic solver choice.
+            representation: ``"vector"`` (MCWF), ``"mps"`` (TJM), or ``"auto"``
+                using ``vector_max_qubits``.
             vector_max_qubits: Non-negative auto cutover from vector to MPS simulation.
             mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` multiprocessing start method.
             max_retries: Non-negative retry count for transient worker failures.
@@ -364,8 +352,9 @@ class MemoryCharacterizer:
             basis: Intervention / Choi basis name.
             basis_seed: Optional RNG seed for basis construction.
             return_type: ``"mpo"`` (direct construction, default) or ``"dense"`` (tomography).
-            check: Whether to validate CPTP properties during dense construction.
-            atol: CPTP check tolerance.
+            check: Whether dense reconstruction reproduces selected tomography responses.
+                This does not check positivity or causal normalization.
+            atol: Tolerance for the mean Frobenius-norm error in the dense self-check.
             compress_every: Positive integer interval for compressing accumulated direct-MPO terms.
             tol: MPO compression tolerance.
             max_bond_dim: Optional positive integer cap on the branch ensemble and MPO bond dimension
@@ -501,7 +490,8 @@ class MemoryCharacterizer:
             sim_params: Analog simulation parameters.
             num_interventions: Positive integer training sequence length (stored on the model).
             n: Positive integer number of training sequences.
-            seed: Optional RNG seed for data sampling and weight init.
+            seed: NumPy seed for training-data sampling (uses 0 when omitted).
+                Does not seed PyTorch weight initialization or batch shuffling.
             timesteps: Optional process-tensor schedule of length ``num_interventions + 1``.
             init_mode: Initial-state sampling mode for training sequences.
             intervention_style: Training intervention style.
@@ -599,47 +589,43 @@ class MemoryCharacterizer:
         delay: int | None = None,
         **probe_kwargs: Any,
     ) -> CharacterizationResult:
-        """Return operational memory diagnostics for a Hamiltonian, surrogate, or process tensor.
+        """Measure operational memory in a Hamiltonian, surrogate, or process tensor.
 
-        For a Hamiltonian, pass ``sim_params`` and ``num_interventions``. For process
-        tensors and surrogates, ``num_interventions`` is inferred from the target when
-        omitted. Default interior cut is ``(num_interventions + 1) // 2``.
+        Hamiltonians require ``sim_params`` and ``num_interventions``. Other targets
+        supply the sequence length when omitted. The default cut is
+        ``(num_interventions + 1) // 2``.
 
         Args:
             target: Hamiltonian, trained surrogate, or reference process tensor.
-            sim_params: Required for Hamiltonian targets only.
-            num_interventions: Positive integer base split-cut sequence length (required for
-                Hamiltonian targets). An explicit ``delay`` adds ``delay + 1`` physical interventions.
-            cut: Single integer causal cut in ``[1, num_interventions]``; mutually exclusive with
-                ``cuts``.
-            cuts: ``"all"`` or a list of integer cuts in ``[1, num_interventions]`` for multi-cut
-                Hamiltonian sweeps.
-            preset: Probe-grid preset (``"quick"``, ``"balanced"``, ``"accurate"``).
-            n_pasts: Optional positive integer number of past probes.
-            n_futures: Optional positive integer number of future probes.
+            sim_params: Analog settings for Hamiltonian targets only.
+            num_interventions: Positive base sequence length. An explicit ``delay``
+                adds ``delay + 1`` physical interventions.
+            cut: Single causal cut in ``[1, num_interventions]``; excludes ``cuts``.
+            cuts: ``"all"`` or a non-empty list of cuts for any supported target.
+            preset: Probe-grid size: ``"quick"``, ``"balanced"``, or ``"accurate"``.
+            n_pasts: Positive past-probe count overriding the preset.
+            n_futures: Positive future-probe count overriding the preset.
             intervention_style: ``"haar"``, ``"clifford"``, or ``"measure_prepare"``.
-            rng: RNG for probe sampling.
-            probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet` to reuse.
-            initial_psi: Optional initial state for Hamiltonian exact simulation.
-            initial_rho: Site-0 state after the initial evolution segment and before the first
-                intervention. Required for surrogate targets and unsupported for Hamiltonian or
-                process-tensor targets.
-            parallel: Override parallelism for process-tensor/surrogate probing.
-            delay: Optional non-negative integer conditioned-reset bridge length (Hamiltonian only).
-                ``None`` uses the standard causal break. Every integer value from zero uses the
-                paper's separate boundary interventions.
-            **probe_kwargs: Unsupported; pass explicit keyword arguments instead.
+            rng: Generator for probe sampling.
+            probe_set: Prior :class:`CharacterizationResult` or :class:`ProbeSet`
+                to reuse at a single cut.
+            initial_psi: Optional initial state for Hamiltonian simulation.
+            initial_rho: Site-0 density matrix after initial evolution, before the
+                first intervention. Required for surrogates; unsupported for other targets.
+            parallel: Override process-tensor or surrogate probing parallelism.
+            delay: Non-negative conditioned-reset length for Hamiltonians only.
+                ``None`` uses one ``(measurement, preparation)`` intervention at the cut.
+                Other values use ``(measurement, |0>)``, then ``delay`` copies of
+                ``(|0>, |0>)``, then ``(|0>, preparation)``. Each pair conditions
+                on its measurement outcome and prepares the specified state.
+            **probe_kwargs: Unsupported; use the explicit arguments.
 
         Returns:
-            Diagnostics with per-cut entropy, modes, spectrum, and stored probes.
+            Per-cut entropy, modes, spectrum, and the sampled probes.
 
         Raises:
-            TypeError: If a Hamiltonian is given without ``sim_params``, or an explicit or
-                inferred size is not an integer.
-            ValueError: If ``num_interventions`` is missing or not positive, a probe count is
-                not positive, a cut is out of range, both ``cut`` and ``cuts`` are given,
-                ``cuts`` is an empty list, ``probe_set`` is reused across multiple cuts, or a
-                conditioned-reset delay is invalid or unsupported by the target.
+            TypeError: If Hamiltonian settings are missing or a sequence size is not an integer.
+            ValueError: If a size, cut, probe reuse, or delay is invalid or unsupported.
         """
         n_p, n_f = _resolve_probe_grid(preset, n_pasts, n_futures)
         resolved_delay = None if delay is None else validate_integer(delay, name="delay", minimum=0)
@@ -941,12 +927,15 @@ class MemoryCharacterizer:
             rho0: Initial ``2 x 2`` density matrix or packed length-8 vector.
             sequence: Intervention kind string, per-slot list, or expanded sequence.
             num_interventions: Positive integer sequence length; inferred from ``target`` when omitted.
-            return_sequence: If True, return the full ``num_interventions``-step trajectory
-                instead of the final state only.
+            return_sequence: For surrogates, return all ``num_interventions`` predicted
+                states instead of only the final state. Excludes the initial state.
+                Unsupported for process tensors.
             rng: RNG for stochastic intervention sampling.
 
         Returns:
-            Final (or full) site-0 reduced density matrix.
+            Final site-0 matrix with shape ``(2, 2)``, or a surrogate trajectory with
+            shape ``(num_interventions, 2, 2)``. Surrogate outputs are Hermitian but
+            are not projected onto positive, trace-one density matrices.
 
         Raises:
             TypeError: If the explicit or inferred ``num_interventions`` is not an integer,

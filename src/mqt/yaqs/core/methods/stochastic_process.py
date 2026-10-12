@@ -5,13 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Stochastic Process of the Tensor Jump Method.
-
-This module implements stochastic processes for quantum systems represented as Matrix Product States (MPS).
-It provides functions to compute the stochastic factor, generate a probability distribution for quantum jumps
-based on a noise model, and perform a stochastic (quantum jump) process on the state. These tools are used
-to simulate noise-induced evolution in quantum many-body systems.
-"""
+"""Jump probabilities, channel sampling, and MPS updates for the Tensor Jump Method."""
 
 from __future__ import annotations
 
@@ -34,18 +28,13 @@ if TYPE_CHECKING:
 
 
 def calculate_stochastic_factor(state: MPS) -> NDArray[np.float64]:
-    """Calculate the stochastic factor for a given state.
-
-    This factor is used to determine the probability that a quantum jump will occur
-    during the stochastic evolution. It is defined as ``1 - ||psi||^2``, i.e.
-    ``1 - <psi|psi>``, of the state at site 0.
+    """Compute the jump probability ``1 - ||psi||**2`` after dissipation.
 
     Args:
-        state: The Matrix Product MPS representing the current state of the system.
-            The state should be in mixed canonical form at site 0 or B normalized.
+        state: Unnormalized MPS after the no-jump dissipative update.
 
     Returns:
-        The calculated stochastic factor as a float.
+        Zero-dimensional float64 array containing the jump probability.
     """
     return np.asarray(1.0 - state.norm(0) ** 2, dtype=np.float64)
 
@@ -89,43 +78,27 @@ def create_probability_distribution(
     dt: float,
     sim_params: AnalogSimParams | DigitalSimParams,
 ) -> tuple[list[dict[str, Any]], list[float]]:
-    """Create a probability distribution for potential quantum jumps in the system.
+    """Compute normalized jump-channel weights without truncating candidate states.
 
-    The function sweeps from left to right over the sites of the MPS. For each
-    site, it shifts the orthogonality center to that site if necessary and then
-    considers all relevant jump operators in the noise model:
-
-    - For each 1-site jump operator acting on the current site, it constructs a
-      candidate post-jump state, computes the corresponding quantum jump
-      probability (proportional to the time step, jump strength, and post-jump
-      norm at that site), and records the operator and site.
-    - For each 2-site jump operator acting on the current site and its right
-      neighbor, it merges the two tensors, applies the operator, and computes
-      the probability from the untruncated post-jump block (truncation is
-      deferred until a channel is selected), then records the operator and site
-      pair.
-
-    After all possible jumps are considered, the per-process probabilities are
-    normalized and returned together with the corresponding processes in the same
-    site-sweep order. ``stochastic_process`` must index both lists with the same
-    ``choice_idx``.
+    Weights are ``dt * gamma * ||L psi||**2``. Processes follow ascending first
+    site, with one-site channels before two-site channels at each site and
+    original model order within each group. Use matching indices for processes
+    and probabilities when selecting a jump.
 
     Args:
-        state: The Matrix Product MPS, assumed left-canonical at site 0 on entry.
-        noise_model: The noise model as a list of process dicts, each with keys
-            "name", "strength", "sites", and "matrix" (for 1-site and adjacent 2-site processes)
-            or "factors" (for long-range 2-site processes).
-        dt: Time step for the evolution, used to scale the jump probabilities.
-        sim_params: Simulation parameters, needed for splitting merged tensors (e.g., SVD threshold, bond dimension).
+        state: Post-dissipation MPS. A known center must be at site zero on entry;
+            the sweep moves it in place.
+        noise_model: Concrete one-site, adjacent two-site, or long-range Pauli
+            processes. ``None`` or an empty model returns empty lists.
+        dt: Interval used to scale channel weights.
+        sim_params: Settings passed to the adjacent jump-weight helper.
 
     Returns:
-        A tuple ``(ordered_processes, probabilities)`` where ``ordered_processes`` are
-        the applicable jump processes in site-sweep order and ``probabilities`` are
-        the corresponding normalized jump probabilities.
+        ``(ordered_processes, probabilities)`` with matching channel order.
 
     Raises:
-        NotImplementedError: If a non-Pauli long-range two-site process is present.
-        ValueError: If jump probability weights are zero or non-finite.
+        NotImplementedError: If a long-range two-site process is not a Pauli product.
+        ValueError: If the total jump weight is zero or non-finite.
     """
     if noise_model is None or not noise_model.processes:
         return [], []
@@ -209,28 +182,27 @@ def stochastic_process(
     sim_params: AnalogSimParams | DigitalSimParams,
     rng: np.random.Generator | None = None,
 ) -> MPS:
-    """Perform a stochastic process on the given state, simulating a quantum jump.
+    """Sample a quantum jump, then normalize the MPS in place at site zero.
 
-    This function randomly determines whether a quantum jump occurs in the given
-    timestep based on the system state and noise model. If a jump is triggered,
-    the function samples the specific jump process according to the calculated
-    probability distribution and applies the corresponding operator to the MPS.
-    Both single-site and nearest-neighbor two-site jump processes are supported,
-    with appropriate tensor contractions and normalization to ensure physical validity.
+    The jump probability is ``1 - ||psi||**2`` after dissipation. Conditional
+    channel probabilities come from :func:`create_probability_distribution`.
+    Supports one-site, adjacent two-site, and long-range Pauli jumps.
+    Non-Pauli long-range channels are rejected by :func:`create_probability_distribution`.
+    Uses the configured truncation when splitting a selected adjacent jump.
 
     Args:
-        state: The current Matrix Product MPS, left-canonical at site 0.
-        noise_model: The noise model, or None for no jumps.
-        dt: The time step for the evolution.
-        sim_params: Simulation parameters (for splitting tensors, required for 2-site jumps).
-        rng: The random number generator to use. If None, valid global rng or new generator is used.
+        state: Post-dissipation MPS; a known center must be at site zero.
+        noise_model: Concrete noise model, or ``None`` for normalization only.
+        dt: Interval used to scale channel weights.
+        sim_params: Truncation settings for the selected adjacent jump.
+        rng: Jump generator. ``None`` creates a new generator without using global RNG state.
 
     Returns:
-        MPS: The updated Matrix Product MPS after the stochastic process.
+        The same MPS after the jump or no-jump update.
 
     Raises:
-        ValueError: If normalization fails, a two-site jump is not nearest-neighbor, or a jump operator does not act
-            on one or two sites.
+        ValueError: If normalization or jump weights are invalid, or a selected
+            operator has unsupported sites.
     """
     if rng is None:
         rng = np.random.default_rng()

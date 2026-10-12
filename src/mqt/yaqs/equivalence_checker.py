@@ -5,20 +5,11 @@
 #
 # Licensed under the MIT License
 
-"""Circuit equivalence checker with MPO and dense matrix backends.
+"""Compare circuits with MPO or dense matrix backends.
 
-This module provides :class:`EquivalenceChecker` for comparing two quantum circuits.
-The scalable MPO algorithm is the primary backend; a dense tensorized matrix backend is
-available for very small circuits. With ``representation="auto"``, circuits with at most
-:data:`DEFAULT_MATRIX_MAX_QUBITS` qubits use the matrix backend and larger circuits use MPO.
-Pass ``representation="mpo"`` explicitly for production workloads.
-
-When a :class:`~mqt.yaqs.core.data_structures.noise_model.NoiseModel` is passed to
-:meth:`EquivalenceChecker.check`, the checker samples ``num_traj`` realizations of the
-noise model on the second circuit and runs the standard relative-operator check on each
-trajectory. The sampled channel is summarized by the root-mean-square trajectory
-overlap and its Monte Carlo error. On this checker path, resolved process strengths
-are direct per-opportunity branch probabilities, rather than Lindblad rates.
+:class:`EquivalenceChecker` uses dense matrices up to
+:data:`DEFAULT_MATRIX_MAX_QUBITS` qubits and MPOs above that limit by default.
+Checks can include sampled noise on the second circuit.
 """
 
 from __future__ import annotations
@@ -75,10 +66,7 @@ _PAULI_ERROR = "The noise model contains a process that is not supported for cir
 
 
 class _CheckResultBase(TypedDict):
-    """Fields shared by single-pair and noisy-ensemble check results.
-
-    Dense operators use Qiskit's site-0-LSB order.
-    """
+    """Fields shared by single-pair and noisy-ensemble results."""
 
     equivalent: bool
     fidelity: float
@@ -92,7 +80,25 @@ class _CheckResultBase(TypedDict):
 
 
 class EquivalenceCheckResult(_CheckResultBase):
-    """Return type of :meth:`EquivalenceChecker.check` for a single pair."""
+    """Result for one circuit pair, with relative operator ``O = U1 U2†``.
+
+    ``fidelity`` is ``|Tr(O)| / d``, where ``d`` is the Hilbert-space dimension.
+    A value of one means equivalence up to global phase, within numerical error.
+    ``equivalent`` compares this overlap with the configured threshold.
+
+    Attributes:
+        equivalent: Whether ``fidelity`` meets the checker's threshold.
+        fidelity: Phase-insensitive overlap; each result type defines its estimator.
+        elapsed_time: Check duration in seconds.
+        representation: Selected backend, ``"matrix"`` or ``"mpo"``.
+        matrix: Relative operator for a noiseless matrix check, otherwise ``None``.
+            Site zero is the least-significant subsystem, matching Qiskit.
+        mpo: Relative operator for a noiseless MPO check, otherwise ``None``.
+            Dense conversion uses the same site order as ``matrix``.
+        schmidt_values: Center-cut operator Schmidt spectrum for MPO checks, otherwise ``None``.
+        center_cut_entanglement_entropy: Center-cut operator entropy for MPO checks, otherwise ``None``.
+        global_entanglement_entropy: Sum of operator entropies across all internal MPO cuts, otherwise ``None``.
+    """
 
 
 class _OptionalEnsembleFields(TypedDict, total=False):
@@ -102,16 +108,20 @@ class _OptionalEnsembleFields(TypedDict, total=False):
 
 
 class EquivalenceEnsembleResult(_CheckResultBase, _OptionalEnsembleFields):
-    """Monte Carlo result from an equivalence check with a noise model.
+    """Monte Carlo result from a check with noise on the second circuit.
 
-    ``fidelity`` is the root-mean-square trajectory overlap, on the same scale as
-    a noiseless result. For multiple trajectories, ``fidelity_error`` is its
-    delta-method Monte Carlo standard error, or zero when every sampled overlap
-    is zero; it is ``None`` for one trajectory. ``equivalent`` compares the point
-    estimate with the configured threshold. MPO diagnostics are averaged across
-    trajectories; shorter Schmidt spectra are zero-padded. ``trajectories`` is
-    included only when ``return_trajectories=True``. This remains a finite-sample
-    decision, not an exact equivalence certificate.
+    ``fidelity`` is the root-mean-square trajectory overlap, on the noiseless
+    scale. ``equivalent`` compares this estimate with the configured threshold;
+    a finite sample does not give an exact equivalence certificate.
+    MPO diagnostics are trajectory averages with zero-padded Schmidt spectra.
+    ``matrix`` and ``mpo`` are ``None``. See :class:`EquivalenceCheckResult`
+    for shared fields.
+
+    Attributes:
+        fidelity_error: Delta-method Monte Carlo standard error; zero if all
+            sampled overlaps are zero, or ``None`` for a single trajectory.
+        num_traj: Number of sampled circuit realizations.
+        trajectories: Individual results, included only with ``return_trajectories=True``.
     """
 
     fidelity_error: float | None
@@ -453,26 +463,9 @@ def _ensemble_trajectory_worker(traj_idx: int) -> EquivalenceCheckResult:
 
 
 class EquivalenceChecker:
-    """Public entry point for circuit equivalence checking.
+    """Compare circuits with reusable numerical thresholds and backend settings.
 
-    The MPO backend is the primary, scalable method; the matrix backend is intended for
-    very small qubits counts. Owns numerical thresholds and backend selection. The two
-    circuits to compare are passed per call to :meth:`check`. Supplying a
-    :class:`NoiseModel` performs a Monte Carlo comparison under sampled noise. For
-    this comparison, concrete process strengths are interpreted as direct error
-    probabilities at each eligible gate.
-
-    Attributes:
-        threshold: Singular-value truncation threshold used during SVD in the MPO update.
-        fidelity: Root-overlap threshold used by both noiseless and noisy checks.
-        representation: Backend selection (``"auto"``, ``"matrix"``, or ``"mpo"``).
-        matrix_max_qubits: Qubit count cutover for ``representation="auto"``.
-        parallel: Whether to parallelize noiseless MPO pair updates and noisy trajectory
-            ensembles (default ``True``).
-        max_workers: Maximum worker threads for noiseless MPO checks, and the process-pool
-            cap for noisy trajectory ensembles. Process pools are also capped by
-            ``num_traj``.
-        mp_context: Multiprocessing start method when a noisy-ensemble process pool is used.
+    :meth:`check` accepts noiseless pairs or a noise model for a Monte Carlo comparison.
     """
 
     def __init__(
@@ -486,22 +479,18 @@ class EquivalenceChecker:
         max_workers: int | None = None,
         mp_context: MPContext = "auto",
     ) -> None:
-        """Initialize the checker with numerical thresholds and backend options.
+        """Configure numerical thresholds and execution.
 
         Args:
-            threshold: Finite, non-negative SVD truncation threshold in the MPO update.
-            fidelity: Minimum root overlap for an identity check (default
-                ``1 - 1e-13``), on the scale returned by both check modes.
-            representation: ``"auto"`` picks matrix for ``num_qubits <= matrix_max_qubits``, else MPO;
-                ``"matrix"`` or ``"mpo"`` force that backend.
-            matrix_max_qubits: Non-negative cutover for ``representation="auto"``.
-            parallel: Boolean that enables parallel checkerboard MPO pair updates on noiseless checks
-                (effective only from 12 qubits upward) and process-pool execution of noisy
-                trajectory ensembles (default ``True``).
-            max_workers: Positive cap on worker threads for noiseless MPO checks and processes
-                for noisy trajectory ensembles. ``None`` selects the default.
+            threshold: Finite, non-negative SVD truncation threshold for MPO updates.
+            fidelity: Minimum root overlap in ``[0, 1]`` for both check modes.
+            representation: ``"auto"`` selects matrices up to ``matrix_max_qubits``,
+                then MPOs. ``"matrix"`` and ``"mpo"`` select a backend explicitly.
+            matrix_max_qubits: Non-negative qubit cutover for automatic selection.
+            parallel: Enable threaded noiseless MPO updates and parallel noisy trajectories.
+            max_workers: Positive cap on noiseless worker threads or noisy worker processes.
+                ``None`` selects the default; noisy pools are also capped by ``num_traj``.
             mp_context: ``"auto"``, ``"fork"``, or ``"spawn"`` for noisy process pools.
-
         """
         self.threshold = threshold
         self.fidelity = fidelity
@@ -686,63 +675,36 @@ class EquivalenceChecker:
         random_seed: int | None = None,
         return_trajectories: bool = False,
     ) -> EquivalenceCheckResult | EquivalenceEnsembleResult:
-        """Compare two quantum circuits, optionally under sampled noise.
+        """Compare two circuits up to global phase, optionally with sampled noise.
 
-        On the noiseless path, circuits that differ only up to global phase and numerical
-        error have a composed operator ``U1 U2†`` that approximates the identity and are
-        reported as equivalent.
-
-        When ``noise_model`` is set, noise is sampled onto ``circuit2`` only. Each of
-        ``num_traj`` independent realizations is checked with the same relative operator
-        ``U_ideal U_noisy†`` used for a noiseless pair. The returned ``fidelity`` is the
-        root-mean-square trajectory overlap, so it uses the same scale and threshold as
-        a noiseless result. The ensemble also reports its Monte Carlo standard error and
-        trajectory-averaged operator-entanglement diagnostics.
-        Resolved process strengths are used as direct branch probabilities after each
-        eligible two-qubit gate. Processes sharing an exact support are mutually
-        exclusive and their probabilities must sum to at most one; distinct supports
-        are sampled independently.
-        With ``parallel=True``, noisy worker count is capped by both ``num_traj`` and
-        ``max_workers``. A process pool is used only when that count is greater than one,
-        and each worker uses serial ``iterate``. ``parallel=False`` keeps the noisy
-        ensemble in-process and serial. MPO zone threads are not used on the noisy path.
+        Checks the relative operator ``U1 U2†``. Noise acts on ``circuit2`` only,
+        after eligible two-qubit gates. Resolved strengths are direct branch
+        probabilities, not Lindblad rates. Processes with the same support are
+        mutually exclusive and their probabilities must sum to at most one.
+        Distinct supports are sampled independently.
 
         Args:
-            circuit1: First quantum circuit. Accepts a :class:`~qiskit.circuit.QuantumCircuit`,
-                a ``Path`` to an OpenQASM file, or a ``str`` — either a filesystem path or raw
-                OpenQASM 2/3 source (when the first substantive line declares ``OPENQASM``).
-                Prefer file paths when the program uses ``include`` directives. OpenQASM 3
-                requires ``pip install mqt-yaqs[qasm3]``.
-            circuit2: Second quantum circuit (must have the same number of qubits).
-                Accepts the same types as ``circuit1``. When ``noise_model`` is set, this is
-                the circuit that is sampled stochastically.
-            noise_model: Optional YAQS noise model. ``None`` runs a single noiseless
-                check. Unsupported processes that cannot be materialized as stochastic
-                circuit operations are rejected. Distribution-valued strengths are
-                resolved once per call, then interpreted as direct per-opportunity
-                probabilities and validated by exact support.
-            num_traj: Number of stochastic circuit realizations when ``noise_model`` is set.
-                Must be ``1`` when ``noise_model`` is ``None``.
-            random_seed: Optional run-level seed for disorder sampling and per-trajectory
-                circuit draws. Must be non-negative; ``None`` uses non-deterministic streams.
-            return_trajectories: Include individual trajectory results in a noisy result.
-                Defaults to ``False`` and must remain ``False`` without ``noise_model``.
+            circuit1: Circuit, QASM file path, or OpenQASM 2/3 source accepted by
+                :func:`~mqt.yaqs.digital.utils.qasm_utils.load_circuit`.
+            circuit2: Second circuit, with the same qubit count and accepted input types.
+            noise_model: Optional :class:`~mqt.yaqs.NoiseModel` with processes supported
+                by stochastic circuit sampling. Distribution-valued strengths are
+                resolved once per call.
+            num_traj: Positive number of noisy circuit realizations; must be one without noise.
+            random_seed: Non-negative seed for strength sampling and circuit draws,
+                or ``None`` for unseeded sampling.
+            return_trajectories: Include individual results; requires a noise model.
 
         Returns:
-            :class:`EquivalenceCheckResult` for a noiseless pair, or
-            :class:`EquivalenceEnsembleResult` when ``noise_model`` is set. Both include
-            the same primary fields. A noisy result additionally includes
-            ``fidelity_error`` and ``num_traj``; ``trajectories`` is opt-in. Any
-            returned dense ``matrix``, and dense conversions of a returned
-            ``mpo``, use site ``0`` as the least-significant subsystem.
+            :class:`EquivalenceCheckResult` without noise, or
+            :class:`EquivalenceEnsembleResult` with root-mean-square overlap and
+            Monte Carlo uncertainty. These types describe the fields and threshold decision.
 
         Raises:
-            ValueError: If the circuits have different numbers of qubits, contain mid-circuit
-                measurements, contain gates on more than two qubits on the MPO backend,
-                ``num_traj`` is used without ``noise_model``, ``num_traj`` is less than one,
-                ``return_trajectories`` is used without ``noise_model``, ``random_seed`` is
-                negative, or the noise model cannot be sampled.
-            TypeError: If an ensemble option or ``noise_model`` has an invalid type.
+            ValueError: If qubit counts differ, a circuit has mid-circuit measurements,
+                the MPO backend encounters a gate on more than two qubits, or an
+                ensemble option or noise probability is invalid.
+            TypeError: If an ensemble option or noise model has an invalid type.
         """
         self._validate_settings()
         num_traj = validate_integer(num_traj, name="num_traj", minimum=1)

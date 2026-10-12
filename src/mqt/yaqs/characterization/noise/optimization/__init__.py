@@ -5,19 +5,10 @@
 #
 # Licensed under the MIT License
 
-"""Analytical optimization pipeline for Markovian noise fitting.
+"""Fit jump rates by matching simulated observable trajectories to reference data.
 
-Fits jump rates by matching simulated observable trajectories to reference data
-using a physics forward model and gradient-free optimization (CMA-ES).
-
-Submodules:
-
-- :mod:`.trajectories` — reference simulation, loss assembly, and simulation helpers
-- :mod:`.loss` — trajectory-mismatch objective for the optimizer
-- :mod:`.run` — :func:`run_optimization_characterization`
-- :mod:`.results` — :class:`NoiseCharacterizationResult`
-
-User code should use :class:`~mqt.yaqs.noise_characterizer.NoiseCharacterizer` only.
+Uses numerical forward models and gradient-free optimization through
+:class:`~mqt.yaqs.NoiseCharacterizer`.
 """
 
 from .results import NoiseCharacterizationResult

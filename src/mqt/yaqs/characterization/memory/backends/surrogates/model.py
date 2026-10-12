@@ -5,17 +5,9 @@
 #
 # Licensed under the MIT License
 
-"""Neural surrogate module: :class:`ProcessTensorSurrogate` only.
+"""Neural prediction of reduced states under intervention sequences.
 
-Training data containers (:class:`~mqt.yaqs.characterization.memory.backends.surrogates.data.SequenceRecord`,
-:func:`~mqt.yaqs.characterization.memory.backends.surrogates.data.stack_sequence_records`) live in
-:mod:`mqt.yaqs.characterization.memory.backends.surrogates.data`.
-
-Batch metrics on packed rho8 vectors live in :mod:`mqt.yaqs.characterization.memory.shared.metrics`.
-
-**Naming** — A **sequence** is the chosen interventions (Choi / features) at each step. A **trajectory**
-(in the noise sense) is one MCWF/TJM stochastic realization; see
-:mod:`mqt.yaqs.characterization.memory.backends.tomography.data`.
+:class:`ProcessTensorSurrogate` defines training and prediction.
 """
 
 from __future__ import annotations

@@ -525,46 +525,15 @@ class _ObservableOrderingMixin:
 
 
 class AnalogSimParams(_ObservableOrderingMixin):
-    """Analog Simulation Parameters.
+    """Settings for analog Hamiltonian evolution.
 
-    A class to represent the parameters for an analog simulation.
+    Constructor settings remain mutable. :meth:`~mqt.yaqs.Simulator.run`
+    validates them and rebuilds the fixed time grid before each run.
 
     Attributes:
-        observables: List of observables tracked during the simulation.
-        sorted_observables: Observables sorted by site for efficient MPS evaluation (computed
-            from the current :attr:`observables` list).
-        observable_sorted_indices: Maps each user-list index to the corresponding row in
-            sorted worker buffers (computed from the current :attr:`observables` list).
-        elapsed_time: Total simulation time (finite, ``>= 0``); must be an integer multiple of ``dt``.
-        dt: Fixed simulation time step (finite, ``> 0``).
-        times: Array of sampled times ``dt * arange(n + 1)`` from ``0`` to ``elapsed_time`` inclusive.
-        sample_timesteps: If ``True``, record values at all sampled timesteps.
-        num_traj: Positive number of trajectories for stochastic open-system evolution.
-        random_seed: If set, seeds per-trajectory jump RNG and static noise sampling for reproducible runs.
-        max_bond_dim: Positive maximum allowed bond dimension, or ``None`` for no cap. Omit the
-            constructor argument to use the preset value; pass ``None`` explicitly for no cap.
-        preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
-            Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-            examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-            strict reference/debug settings (still subject to timestep and sampling error).
-            Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
-            TDVP and BUG local updates. Smaller values are more accurate but may require
-            more Krylov vectors. Explicit values override the preset.
-        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
-            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
-        svd_threshold: SVD truncation threshold for bond dimension control. Zero disables
-            tolerance-based truncation for discarded-weight modes.
-        order: Integration order, either one or two.
-        get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-        multi_time_observables: Optional list of ``(A, B)`` observable pairs for unitary-ensemble
-            two-time correlators. Each entry computes ``<psi(t)|A U(t) B|psi(0)>``.
-            Autocorrelation is the special case ``(O, O)``. Results are indexed by pair position.
-        tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
-            symmetric integrator step (LTR then RTL) at evolution time ``dt / tdvp_sweeps``.
-            Default is ``1``.
-        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"2site"``.
+        times: Sample times from zero through ``elapsed_time``, spaced by ``dt``.
+        sorted_observables: Observables sorted by site for MPS evaluation.
+        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     def __init__(
@@ -588,43 +557,32 @@ class AnalogSimParams(_ObservableOrderingMixin):
         tdvp_sweeps: int = 1,
         tdvp_mode: TDVPMode = "2site",
     ) -> None:
-        """Physics simulation parameters initialization.
-
-        Initializes parameters for a physics-based quantum simulation.
+        """Configure analog evolution and its outputs.
 
         Args:
-            observables: List of observables to measure during the simulation.
-            elapsed_time: Total simulation time (finite, ``>= 0``). Must be an integer
-                multiple of ``dt`` because backends evolve with fixed ``dt``.
-            dt: Fixed time step interval (finite, ``> 0``).
-            num_traj: Positive number of simulation samples.
-            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap. Omit to use
-                the preset value; pass ``None`` explicitly for no cap.
-            preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol``.
-                Default is ``"balanced"``. ``"fast"`` is intended for quick tests and
-                examples, ``"accurate"`` for high-quality production runs, and ``"exact"`` for
-                strict reference/debug settings (still subject to timestep and sampling error).
-                Explicit ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and ``krylov_tol`` override the preset.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential used in
-                TDVP and BUG local updates. Smaller values are more accurate but may require
-                more Krylov vectors. Explicit values override the preset.
-            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
-                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
-            svd_threshold: SVD truncation threshold for bond dimension control.
-            order: Integration order, either one or two.
-            sample_timesteps: Whether to sample at intermediate time steps.
-            evolution_mode: Tensor evolution mode (default ``EvolutionMode.TDVP``).
-                ``EvolutionMode.BUG`` uses center-augmented alternating endpoints with
-                one compression and renormalization after each ``dt`` step.
-            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-            multi_time_observables: For ``list[State]`` unitary ensemble runs only, list of
-                one- or two-site operator pairs ``(A, B)`` evaluated as
-                ``<psi(t)|A U(t) B|psi(0)>``. Autocorrelation is the special case ``(O, O)``.
-            tdvp_sweeps: Number of TDVP substeps per time step ``dt``. Each substep is a
-                symmetric integrator step at ``dt / tdvp_sweeps`` (default ``1``).
-            tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-                Default is ``"2site"``.
+            observables: Observables to measure, in result order.
+            elapsed_time: Finite, non-negative duration; must be an integer multiple of ``dt``.
+            dt: Finite, positive fixed time step.
+            num_traj: Positive stochastic trajectory count.
+            max_bond_dim: Positive bond cap. Omit to use the preset; explicit ``None`` removes the cap.
+            trunc_mode: SVD rule: ``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``.
+            svd_threshold: SVD threshold. Zero disables tolerance-based truncation
+                in discarded-weight modes.
+            krylov_tol: Tolerance for the local Krylov/Lanczos matrix exponential.
+            order: TJM integration order, one or two.
+            preset: ``"fast"``, ``"balanced"``, ``"accurate"``, or ``"exact"``.
+                Sets ``num_traj``, ``max_bond_dim``, ``svd_threshold``, and ``krylov_tol``;
+                explicit values override it. ``"exact"`` still has timestep and sampling error.
+            sample_timesteps: Record every time step rather than only the final values.
+            evolution_mode: ``EvolutionMode.TDVP`` or ``EvolutionMode.BUG`` for MPS evolution.
+            get_state: Retain the final state in :class:`~mqt.yaqs.Result`.
+            random_seed: Seed for stochastic jumps and static noise sampling.
+            multi_time_observables: One- or two-site pairs ``(A, B)`` for noiseless
+                ``list[State]`` ensembles, computing ``<psi(t)|A U(t) B|psi(0)>``.
+            tdvp_sweeps: Positive number of symmetric TDVP substeps, each of duration
+                ``dt / tdvp_sweeps``.
+            tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
@@ -652,55 +610,17 @@ class AnalogSimParams(_ObservableOrderingMixin):
 
 
 class DigitalSimParams(_ObservableOrderingMixin):
-    """Digital (circuit) simulation parameters.
+    """Settings for MPS circuit simulation.
 
-    Configures MPS circuit simulation. Outputs are selected by which fields are set:
-    non-empty ``observables`` yield expectation values, ``shots`` yields computational-basis
-    counts, and ``get_state`` yields the final state. A standalone
-    :meth:`~mqt.yaqs.Simulator.run` requires at least one of these outputs, while an
-    output-less instance is valid inside a :class:`~mqt.yaqs.SimulationProgram` because
-    state propagation is itself meaningful there.
-    Observables and shots may be requested together; shots sample bitstrings from amplitudes
-    and do not projectively measure the configured observables. Bitstring observables and
-    shot counts require qubit dimensions at every measured site.
-
-    ``num_traj`` and ``shots`` are independent controls:
-
-    - ``num_traj`` is the number of noisy stochastic trajectories used to estimate
-      observables and trajectory diagnostics.
-    - ``shots`` is the total requested bitstring-sample budget.
-    - When both ``observables`` and ``shots`` are set for a **noisy** circuit, the
-      simulator runs ``num_traj`` trajectories and distributes the total ``shots``
-      across them. If ``shots < num_traj``, some trajectories still contribute
-      observable data but receive zero measurement samples (supported; no error).
-    - For **noiseless** circuits, one trajectory is sufficient; all ``shots`` are
-      sampled from that final state.
+    Select outputs with ``observables``, ``shots``, and ``get_state``.
+    A standalone run needs at least one output; a program segment can propagate
+    the state without recording outputs. Shots sample the final computational
+    basis, independently of the configured observables.
 
     Attributes:
-        dt: Placeholder for code compatibility with analog evolution helpers.
-        observables: Observables tracked during the simulation (may be empty).
-        sorted_observables: Observables sorted by site for efficient MPS evaluation.
-        observable_sorted_indices: Maps each user-list index to the sorted worker-buffer row.
-        shots: Positive computational-basis bitstring-sample budget, or ``None`` if unused.
-        num_traj: Positive number of noisy stochastic trajectories for observables/diagnostics.
-        random_seed: If set, seeds per-trajectory jump RNG and static noise sampling.
-        max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap.
-        preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
-            ``krylov_tol``. Explicit values override the preset.
-        krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-        trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
-            ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
-        svd_threshold: SVD truncation threshold for bond dimension control.
-        get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-        sample_layers: If ``True``, record observables at ``SAMPLE_OBSERVABLES`` barriers.
-        num_mid_measurements: Non-negative mid-circuit barrier count when sampling layers.
-        gate_mode: Gate update mode (``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or
-            ``"mpo"``). Default is ``"mpo"``. Gates on three or more qubits use the
-            generator MPO and TDVP window in the TDVP modes when a generator is
-            available, and the gate-MPO path otherwise (including ``"swaps"``).
-        tdvp_sweeps: Number of symmetric TDVP substeps per gate. Default is ``1``.
-        tdvp_mode: TDVP integrator geometry (``"1site"``, ``"2site"``, or ``"dynamic"``).
-            Default is ``"2site"``.
+        dt: Compatibility time step for analog evolution helpers.
+        sorted_observables: Observables sorted by site for MPS evaluation.
+        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     dt = 1
@@ -724,37 +644,32 @@ class DigitalSimParams(_ObservableOrderingMixin):
         tdvp_sweeps: int = 1,
         tdvp_mode: TDVPMode = "2site",
     ) -> None:
-        """Initialize digital circuit simulation parameters.
-
-        All arguments are keyword-only so positional integers cannot be silently
-        reinterpreted as ``shots``, ``num_traj``, or ``max_bond_dim``.
+        """Configure circuit evolution and its outputs.
 
         Args:
-            observables: List of observables to measure during simulation.
-            shots: Total bitstring-sample budget for computational-basis readout, or
-                ``None`` to skip. The budget must be positive when set. It is independent
-                of ``num_traj``; with noise, the budget is distributed across trajectories.
-                Binary shot output requires an all-qubit state layout.
-            num_traj: Positive number of noisy stochastic trajectories used to estimate
-                observables and trajectory diagnostics. Ignored for noiseless runs
-                (one trajectory is enough). When ``shots < num_traj`` in a noisy
-                combined run, some trajectories receive zero samples by design.
-            max_bond_dim: Positive maximum bond dimension, or ``None`` for no cap. Omit to use the
-                preset; pass ``None`` explicitly for no cap.
-            preset: Preset controlling ``svd_threshold``, ``max_bond_dim``, ``num_traj``, and
-                ``krylov_tol``. Default is ``"balanced"``.
-            krylov_tol: Tolerance for the adaptive Krylov/Lanczos matrix exponential.
-            trunc_mode: Truncation mode (``"discarded_weight"``, ``"relative"``,
-                ``"hard_cutoff"``, or ``"relative_discarded_weight"``).
-            svd_threshold: SVD truncation threshold for bond dimension control.
-            get_state: If ``True``, request the final state on the returned :class:`~mqt.yaqs.Result`.
-            sample_layers: If ``True``, record observables at sampled circuit layers.
-            num_mid_measurements: Non-negative number of mid-circuit measurement barriers when sampling layers.
-            random_seed: If set, makes stochastic trajectories and noise-model sampling reproducible.
-            gate_mode: Gate update mode (default ``"mpo"``).
-            tdvp_sweeps: Number of symmetric TDVP substeps per gate (default ``1``).
-            tdvp_mode: TDVP integrator geometry (default ``"2site"``).
-
+            observables: Observables to measure, in result order.
+            shots: Positive total bitstring-sample budget, or ``None`` to skip readout.
+                Requires an all-qubit state. With noise, samples are distributed
+                across trajectories; noiseless readout uses one final state.
+            num_traj: Positive noisy trajectory count for observables and diagnostics.
+                Independent of ``shots`` and ignored without noise. In noisy runs
+                with both outputs, ``shots < num_traj`` gives some trajectories zero shots.
+            max_bond_dim: Positive bond cap. Omit to use the preset; explicit ``None`` removes the cap.
+            trunc_mode: SVD rule: ``"discarded_weight"``, ``"relative"``,
+                ``"hard_cutoff"``, or ``"relative_discarded_weight"``.
+            svd_threshold: SVD truncation threshold.
+            krylov_tol: Tolerance for the local Krylov/Lanczos matrix exponential.
+            preset: ``"fast"``, ``"balanced"``, ``"accurate"``, or ``"exact"``.
+                Sets ``num_traj``, ``max_bond_dim``, ``svd_threshold``, and ``krylov_tol``;
+                explicit values override it. Sampling and numerical errors can remain.
+            get_state: Retain the final state in :class:`~mqt.yaqs.Result`.
+            sample_layers: Record observables at ``SAMPLE_OBSERVABLES`` barriers.
+            num_mid_measurements: Non-negative number of sampling barriers when sampling layers.
+            random_seed: Seed for stochastic jumps and static noise sampling;
+                does not seed final shot readout.
+            gate_mode: Gate update mode: ``"swaps"``, ``"tdvp"``, ``"full-tdvp"``, or ``"mpo"``.
+            tdvp_sweeps: Positive number of symmetric TDVP substeps per gate.
+            tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
         preset_values = SIMULATION_PRESETS[_validate_preset(preset)]

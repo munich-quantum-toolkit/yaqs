@@ -102,7 +102,9 @@ def extend_gate(
             ``min(sites)`` to ``max(sites)``. When omitted, every site uses dimension 2.
 
     Returns:
-        MPO: The resulting Matrix Product Operator with the gate tensor extended over the specified sites.
+        MPO site tensors in ascending site order from ``min(sites)`` to ``max(sites)``,
+        including identity tensors between gate sites. Each tensor has axis order
+        ``(out, in, bond_left, bond_right)``.
 
     Raises:
         ValueError: If ``physical_dimensions`` does not match the site span length.
@@ -149,18 +151,21 @@ def extend_gate(
 
 
 class BaseGate:
-    """Base class representing a quantum gate.
+    """Store a local operator and its sites for tensor-network simulation.
+
+    :meth:`set_sites` binds physical sites in the operator's factor order.
+    Gate subclasses define their operator and parameter conventions.
 
     Attributes:
-        name: The name of the gate.
-        matrix: The matrix representation of the gate.
-        interaction: The interaction type or level of the gate.
-        tensor: The tensor representation of the gate.
-        generator: The generator(s) for the gate.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites on which the gate acts.
+        name: Gate identifier.
+        matrix: Dense operator in local factor order.
+        interaction: Number of sites the operator acts on.
+        tensor: Matrix, or tensor with output axes followed by input axes after site binding.
+        sites: Physical site indices in local factor order, assigned by :meth:`set_sites`.
+        generator: Product factors for ``exp(-1j * G)``, assigned on site binding
+            for gates that support generator-based evolution.
+        mpo_tensors: Gate MPO tensors in ascending physical-site order, including
+            spectator identities, available after binding two or more sites.
     """
 
     name: str = "custom"
@@ -171,14 +176,14 @@ class BaseGate:
     sites: list[int]
 
     def __init__(self, mat: ArrayLike) -> None:
-        """Initializes a BaseGate instance with the given matrix.
+        """Build a qubit operator from a dense matrix without checking unitarity.
 
         Args:
-            mat: The matrix representation of the gate.
+            mat: Square matrix whose dimension is a power of two.
 
         Raises:
-            ValueError: If the matrix is not a square 2-D array.
-            ValueError: If the matrix dimension is not a power of 2.
+            ValueError: If the matrix is not square and two-dimensional, or its
+                dimension is not a power of two.
         """
         matrix = np.asarray(mat, dtype=np.complex128)
         if matrix.ndim != 2:
@@ -199,13 +204,16 @@ class BaseGate:
         self.interaction = interaction
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
+        """Bind sites and build the multi-qubit tensor and MPO representation.
 
         Args:
-            *sites: Variable-length argument list specifying site indices.
+            *sites: Site indices or lists of indices, in local operator-factor order.
+                Controlled gates list controls before targets. MPO tensors follow
+                ascending physical-site order.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction`` or multi-qubit
+                support is invalid.
         """
         sites_list = []
         for s in sites:
@@ -616,18 +624,7 @@ class BaseGate:
 
 
 class X(BaseGate):
-    """Class representing the Pauli-X (NOT) gate.
-
-    Attributes:
-        name: The name of the gate ("x").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Pauli-X (NOT) gate."""
 
     name = "x"
 
@@ -637,18 +634,7 @@ class X(BaseGate):
 
 
 class Y(BaseGate):
-    """Class representing the Pauli-Y gate.
-
-    Attributes:
-        name: The name of the gate ("y").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Pauli-Y gate."""
 
     name = "y"
 
@@ -658,18 +644,7 @@ class Y(BaseGate):
 
 
 class Z(BaseGate):
-    """Class representing the Pauli-Z gate.
-
-    Attributes:
-        name: The name of the gate ("z").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Pauli-Z gate."""
 
     name = "z"
 
@@ -679,18 +654,7 @@ class Z(BaseGate):
 
 
 class H(BaseGate):
-    """Class representing the Hadamard (H) gate.
-
-    Attributes:
-        name: The name of the gate ("h").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Hadamard gate."""
 
     name = "h"
 
@@ -700,18 +664,7 @@ class H(BaseGate):
 
 
 class Destroy(BaseGate):
-    """Class representing the Destroy (annihilation) gate.
-
-    Attributes:
-        name: The name of the gate ("destroy").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Truncated annihilation operator with ``a[n-1, n] = sqrt(n)``."""
 
     name = "destroy"
 
@@ -728,18 +681,7 @@ class Destroy(BaseGate):
 
 
 class Create(BaseGate):
-    """Class representing the Create (creation) gate.
-
-    Attributes:
-        name: The name of the gate ("create").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Truncated creation operator with ``a†[n, n-1] = sqrt(n)``."""
 
     name = "create"
 
@@ -756,18 +698,7 @@ class Create(BaseGate):
 
 
 class Id(BaseGate):
-    """Class representing the identity (Id) gate.
-
-    Attributes:
-        name: The name of the gate ("id").
-        matrix: The 2x2 identity matrix.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Single-qubit identity gate."""
 
     name = "id"
 
@@ -777,18 +708,7 @@ class Id(BaseGate):
 
 
 class SX(BaseGate):
-    """Class representing the square-root X (SX) gate.
-
-    Attributes:
-        name: The name of the gate ("sx").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Square-root X gate, with ``SX @ SX = X``."""
 
     name = "sx"
 
@@ -799,18 +719,7 @@ class SX(BaseGate):
 
 
 class Sdg(BaseGate):
-    """Class representing the adjoint S (S-dagger) gate.
-
-    Attributes:
-        name: The name of the gate ("sdg").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Adjoint S gate ``diag(1, -1j)``."""
 
     name = "sdg"
 
@@ -821,18 +730,7 @@ class Sdg(BaseGate):
 
 
 class S(BaseGate):
-    """Class representing the S gate.
-
-    Attributes:
-        name: The name of the gate ("s").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Phase gate ``diag(1, 1j)``."""
 
     name = "s"
 
@@ -843,18 +741,7 @@ class S(BaseGate):
 
 
 class Tdg(BaseGate):
-    """Class representing the adjoint T (T-dagger) gate.
-
-    Attributes:
-        name: The name of the gate ("tdg").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Adjoint T gate ``diag(1, exp(-1j * pi / 4))``."""
 
     name = "tdg"
 
@@ -865,18 +752,7 @@ class Tdg(BaseGate):
 
 
 class T(BaseGate):
-    """Class representing the T gate.
-
-    Attributes:
-        name: The name of the gate ("t").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Phase gate ``diag(1, exp(1j * pi / 4))``."""
 
     name = "t"
 
@@ -887,18 +763,7 @@ class T(BaseGate):
 
 
 class SXdg(BaseGate):
-    """Class representing the adjoint SX (SX-dagger) gate.
-
-    Attributes:
-        name: The name of the gate ("sxdg").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Adjoint of the square-root X gate."""
 
     name = "sxdg"
 
@@ -909,19 +774,7 @@ class SXdg(BaseGate):
 
 
 class Rx(BaseGate):
-    """Class representing a rotation gate about the x-axis.
-
-    Attributes:
-        name: The name of the gate ("rx").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        theta: The rotation angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """X-axis rotation ``exp(-1j * theta * X / 2)``."""
 
     name = "rx"
 
@@ -929,8 +782,7 @@ class Rx(BaseGate):
         """Initializes the rotation gate about the x-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -941,19 +793,7 @@ class Rx(BaseGate):
 
 
 class Ry(BaseGate):
-    """Class representing a rotation gate about the y-axis.
-
-    Attributes:
-        name: The name of the gate ("ry").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        theta: The rotation angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Y-axis rotation ``exp(-1j * theta * Y / 2)``."""
 
     name = "ry"
 
@@ -961,8 +801,7 @@ class Ry(BaseGate):
         """Initializes the rotation gate about the y-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -973,19 +812,7 @@ class Ry(BaseGate):
 
 
 class Rz(BaseGate):
-    """Class representing a rotation gate about the z-axis.
-
-    Attributes:
-        name: The name of the gate ("rz").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        theta: The rotation angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Z-axis rotation ``exp(-1j * theta * Z / 2)``."""
 
     name = "rz"
 
@@ -993,8 +820,7 @@ class Rz(BaseGate):
         """Initializes the rotation gate about the z-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1005,19 +831,7 @@ class Rz(BaseGate):
 
 
 class Phase(BaseGate):
-    """Class representing a phase gate.
-
-    Attributes:
-        name: The name of the gate ("p").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        theta: The phase angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Single-qubit phase gate ``diag(1, exp(1j * theta))``."""
 
     name = "p"
 
@@ -1025,8 +839,7 @@ class Phase(BaseGate):
         """Initializes the phase gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
@@ -1034,29 +847,15 @@ class Phase(BaseGate):
 
 
 class U2(BaseGate):
-    """Class representing a U2 gate.
-
-    Attributes:
-        name: The name of the gate ("u2").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        phi: The first rotation parameter.
-        lam: The second rotation parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Single-qubit :class:`U` gate with ``theta = pi / 2``."""
 
     name = "u2"
 
     def __init__(self, params: list[Parameter]) -> None:
-        """Initializes the U2 gate.
+        """Set the two phase angles of the U2 gate.
 
         Args:
-            params: list[Parameter]
-                A list containing two rotation angles [phi, lambda].
+            params: Angles ``[phi, lambda]`` in radians.
         """
         self.phi, self.lam = params
 
@@ -1070,21 +869,7 @@ class U2(BaseGate):
 
 
 class U(BaseGate):
-    """Class representing a U3 gate.
-
-    Attributes:
-        name: The name of the gate ("u").
-        matrix: The 2x2 matrix representation of the gate.
-        interaction: The interaction level (1 for single-qubit gates).
-        tensor: The tensor representation of the gate (same as the matrix).
-        theta: The first rotation parameter.
-        phi: The second rotation parameter.
-        lam: The third rotation parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the site(s) where the gate is applied.
-    """
+    """Single-qubit Euler rotation in Qiskit U convention: ``[theta, phi, lambda]``."""
 
     name = "u"
 
@@ -1092,8 +877,7 @@ class U(BaseGate):
         """Initializes the U3 gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a three rotation angle (theta, phi, lambda) parameters.
+            params: Rotation angles ``[theta, phi, lambda]`` in radians.
         """
         self.theta, self.phi, self.lam = params
         mat = np.array([
@@ -1107,21 +891,7 @@ class U(BaseGate):
 
 
 class CX(BaseGate):
-    """Class representing the controlled-NOT (CX) gate.
-
-    Attributes:
-        name: The name of the gate ("cx").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        mpo: An MPO representation generated from the gate tensor.
-        sites: The control and target sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
+    """Controlled-X (CNOT) gate; sites list the control before the target."""
 
     name = "cx"
 
@@ -1130,13 +900,10 @@ class CX(BaseGate):
         super().__init__(CONTROLLED_X.copy())
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1162,20 +929,7 @@ class CX(BaseGate):
 
 
 class CZ(BaseGate):
-    """Class representing the controlled-Z (CZ) gate.
-
-    Attributes:
-        name: The name of the gate ("cz").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Controlled-Z gate, which changes the sign of the local ``|11>`` state."""
 
     name = "cz"
 
@@ -1184,13 +938,10 @@ class CZ(BaseGate):
         super().__init__(CONTROLLED_Z.copy())
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1216,21 +967,7 @@ class CZ(BaseGate):
 
 
 class CCX(BaseGate):
-    """Class representing the double-controlled NOT (Toffoli, CCX) gate.
-
-    Attributes:
-        name: The name of the gate ("ccx").
-        matrix: The 8x8 matrix representation of the gate.
-        interaction: The interaction level (3 for three-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
-        generator: The generator for the gate.
-        mpo_tensors: An MPO representation generated from the gate tensor.
-        sites: The two control sites and the target site.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
+    """Toffoli gate; sites list the two controls before the target."""
 
     name = "ccx"
 
@@ -1249,11 +986,7 @@ class CCX(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate and assigns the product-form generator.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
-        """
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`."""
         super().set_sites(*sites)
         # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - X))
         self.generator = [
@@ -1264,21 +997,7 @@ class CCX(BaseGate):
 
 
 class CCZ(BaseGate):
-    """Class representing the double-controlled Z (CCZ) gate.
-
-    Attributes:
-        name: The name of the gate ("ccz").
-        matrix: The 8x8 matrix representation of the gate.
-        interaction: The interaction level (3 for three-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
-        generator: The generator for the gate.
-        mpo_tensors: An MPO representation generated from the gate tensor.
-        sites: The two control sites and the target site.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
-    """
+    """Double-controlled Z gate, which changes the sign of the local ``|111>`` state."""
 
     name = "ccz"
 
@@ -1288,11 +1007,7 @@ class CCZ(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate and assigns the product-form generator.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
-        """
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`."""
         super().set_sites(*sites)
         # Generator: π/4 * ((I - Z) ⊗ P1 ⊗ (I - Z))
         self.generator = [
@@ -1303,21 +1018,7 @@ class CCZ(BaseGate):
 
 
 class CPhase(BaseGate):
-    """Class representing the controlled phase (CPhase) gate.
-
-    Attributes:
-        name: The name of the gate ("cp").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Controlled phase gate ``diag(1, 1, 1, exp(1j * theta))``."""
 
     name = "cp"
 
@@ -1325,21 +1026,17 @@ class CPhase(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1363,19 +1060,7 @@ class CPhase(BaseGate):
 
 
 class SWAP(BaseGate):
-    """Class representing the SWAP gate.
-
-    Attributes:
-        name: The name of the gate ("swap").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        sites: The sites involved in the swap.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Exchange the two specified qubit states."""
 
     name = "swap"
 
@@ -1409,22 +1094,9 @@ class SWAP(BaseGate):
 
 
 class CSWAP(BaseGate):
-    """Class representing the controlled-SWAP (Fredkin, CSWAP) gate.
+    """Fredkin gate; sites list the control before the two swapped qubits.
 
-    The SWAP part of the gate has no single-product generator, so the gate carries no
-    ``generator`` attribute and is applied via its MPO representation.
-
-    Attributes:
-        name: The name of the gate ("cswap").
-        matrix: The 8x8 matrix representation of the gate.
-        interaction: The interaction level (3 for three-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2, 2, 2).
-        mpo_tensors: An MPO representation generated from the gate tensor.
-        sites: The control site and the two swapped sites.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor and MPO.
+    Has no product-form generator and uses its MPO representation.
     """
 
     name = "cswap"
@@ -1445,21 +1117,7 @@ class CSWAP(BaseGate):
 
 
 class Rxx(BaseGate):
-    """Class representing a two-qubit rotation gate about the xx-axis.
-
-    Attributes:
-        name: The name of the gate ("rxx").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Two-qubit Pauli rotation ``exp(-1j * theta * (X ⊗ X) / 2)``."""
 
     name = "rxx"
     interaction = 2
@@ -1468,8 +1126,7 @@ class Rxx(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1481,13 +1138,10 @@ class Rxx(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1507,21 +1161,7 @@ class Rxx(BaseGate):
 
 
 class Ryy(BaseGate):
-    """Class representing a two-qubit rotation gate about the yy-axis.
-
-    Attributes:
-        name: The name of the gate ("ryy").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Two-qubit Pauli rotation ``exp(-1j * theta * (Y ⊗ Y) / 2)``."""
 
     name = "ryy"
     interaction = 2
@@ -1530,8 +1170,7 @@ class Ryy(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1543,13 +1182,10 @@ class Ryy(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1569,21 +1205,7 @@ class Ryy(BaseGate):
 
 
 class Rzz(BaseGate):
-    """Class representing a two-qubit rotation gate about the zz-axis.
-
-    Attributes:
-        name: The name of the gate ("rzz").
-        matrix: The 4x4 matrix representation of the gate.
-        interaction: The interaction level (2 for two-qubit gates).
-        tensor: The tensor representation reshaped to (2, 2, 2, 2).
-        generator: The generator for the gate.
-        sites: The control and target sites.
-        theta: The angle parameter.
-
-    Methods:
-        set_sites(*sites: int) -> None:
-            Sets the sites and updates the tensor.
-    """
+    """Two-qubit Pauli rotation ``exp(-1j * theta * (Z ⊗ Z) / 2)``."""
 
     name = "rzz"
     interaction = 2
@@ -1592,8 +1214,7 @@ class Rzz(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1605,13 +1226,10 @@ class Rzz(BaseGate):
         super().__init__(mat)
 
     def set_sites(self, *sites: int | list[int]) -> None:
-        """Sets the sites for the gate.
-
-        Args:
-            *sites: Variable-length argument list specifying site indices.
+        """Bind sites and the product-form generator; see :meth:`BaseGate.set_sites`.
 
         Raises:
-            ValueError: If the number of sites does not match the interaction level of the gate.
+            ValueError: If the site count differs from ``interaction``.
         """
         sites_list = []
         for s in sites:
@@ -1631,54 +1249,11 @@ class Rzz(BaseGate):
 
 
 class GateLibrary:
-    """A collection of quantum gate classes for use in simulations.
+    """Named gate classes for constructing local operators.
 
-    This library exposes gate **classes** (not instances). Each attribute points to
-    a concrete `BaseGate` subclass implementing the corresponding operator. Use
-    them like `GateLibrary.rx(theta)` or `GateLibrary.cz()` (depending on your
-    constructors), or via any factory utilities you provide.
-
-    Attributes:
-        x: Class for the Pauli-X gate.
-        y: Class for the Pauli-Y gate.
-        z: Class for the Pauli-Z gate.
-        sx: Class for the √X (SX) gate.
-        sxdg: Class for the adjoint √X (SX-dagger) gate.
-        s: Class for the S gate.
-        sdg: Class for the adjoint S (S-dagger) gate.
-        t: Class for the T gate.
-        tdg: Class for the adjoint T (T-dagger) gate.
-        h: Class for the Hadamard gate.
-        id: Class for the identity gate.
-        i: Alias for the identity gate.
-        iden: Alias for the identity gate.
-
-        rx: Class for rotation about the X-axis.
-        ry: Class for rotation about the Y-axis.
-        rz: Class for rotation about the Z-axis.
-        u:  Class for the generic single-qubit U gate.
-        u3: Alias for the generic single-qubit U gate.
-        u2: Class for the U2 (fixed-θ,φ) single-qubit gate.
-        u1: Alias for the single-qubit phase gate.
-
-        cx: Class for the controlled-NOT (CNOT) gate.
-        cz: Class for the controlled-Z gate.
-        ccx: Class for the double-controlled NOT (Toffoli) gate.
-        ccz: Class for the double-controlled Z gate.
-        swap: Class for the SWAP gate.
-        cswap: Class for the controlled-SWAP (Fredkin) gate.
-
-        rxx: Class for two-qubit rotation about XX.
-        ryy: Class for two-qubit rotation about YY.
-        rzz: Class for two-qubit rotation about ZZ.
-
-        cp: Class for the controlled-phase gate.
-        p:  Class for the single-qubit phase gate.
-
-        destroy: Class for the annihilation operator (ladder operator a).
-        create:  Class for the creation operator (ladder operator a†).
-
-        custom: Base class hook for defining custom gates (falls back to `BaseGate`).
+    Each attribute is a :class:`BaseGate` subclass. Construct gates with
+    ``GateLibrary.rx([theta])`` or ``GateLibrary.cz()``, then bind their sites.
+    Aliases include ``u3`` for ``u``, ``u1`` for ``p``, and ``i`` and ``iden`` for ``id``.
     """
 
     x = X

@@ -77,7 +77,7 @@ def preprocess_mcwf(
     num_sites: int,
     physical_dimensions: int | list[int] | None = None,
 ) -> MCWFContext:
-    """Pre-compute dense operators and initial state for MCWF simulation.
+    """Prepare sparse operators, a normalized state, and an optional dense propagator.
 
     Called once per :meth:`~mqt.yaqs.Simulator.run` before trajectory workers start.
 
@@ -90,7 +90,8 @@ def preprocess_mcwf(
         physical_dimensions: Per-site physical dimensions. Defaults to qubits.
 
     Returns:
-        MCWFContext containing dense arrays ready for trajectory simulation.
+        Context with sparse effective Hamiltonian and jump operators, embedded
+        observables, and a dense step propagator when the system size permits it.
 
     Raises:
         ValueError: If ``psi_initial`` has the wrong Hilbert-space size or zero norm, or if
@@ -221,13 +222,16 @@ def mcwf(
 
     Args:
         args: A tuple containing:
-            - int: Trajectory identifier (used for RNG seeding in parallel runs).
+            - int: Trajectory identifier used for RNG seeding.
             - MCWFContext: Pre-computed simulation context from ``preprocess_mcwf``.
         rng: Optional trajectory RNG continued across consecutive segments.
             When omitted, create a generator using the configured seed.
 
     Returns:
-        An array of expectation values for each observable over time.
+        Tuple ``(observable_results, None, final_vector)``. Observable results have
+        shape ``(num_observables, num_samples)`` in sorted observable order.
+        ``num_samples`` is ``len(sim_params.times)`` when sampling timesteps,
+        otherwise 1. The final vector is returned only when ``get_state=True``.
     """
     traj_idx, ctx = args
     sim_params = ctx.sim_params

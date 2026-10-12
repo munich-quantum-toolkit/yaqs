@@ -1675,7 +1675,8 @@ def test_measure_shots_basis(
 
 
 def test_measure_shots_avoids_nested_process_pool_in_xdist(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``measure_shots`` must not spawn extra workers inside a pytest-xdist worker."""
+    """Without a worker override, shot sampling stays serial within xdist."""
+    monkeypatch.delenv("YAQS_MAX_WORKERS", raising=False)
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
     psi = MPS(length=2, state="zeros")
     with patch("mqt.yaqs.core.data_structures.mps.ProcessPoolExecutor") as mock_executor:
@@ -2055,8 +2056,8 @@ def test_check_canonical_form_none() -> None:
     assert res == []
 
 
-def test_check_canonical_form_left() -> None:
-    """Test that the left canonical form is detected correctly."""
+def test_check_canonical_form_right() -> None:
+    """Right-canonical tensors allow an orthogonality center at site 0."""
     unitary_mid = unitary_group.rvs(6).reshape((6, 2, 3)).transpose(1, 0, 2)
     unitary_right = unitary_group.rvs(3).reshape(3, 3, 1)
     tensors = [crandn(2, 1, 6), unitary_mid, unitary_right]
@@ -2065,8 +2066,8 @@ def test_check_canonical_form_left() -> None:
     assert 0 in res
 
 
-def test_check_canonical_form_right() -> None:
-    """Test that the right canonical form is detected correctly."""
+def test_check_canonical_form_left() -> None:
+    """Left-canonical tensors allow an orthogonality center at the final site."""
     unitary_left = unitary_group.rvs(3).astype(np.complex128).reshape(3, 1, 3)
     unitary_mid = unitary_group.rvs(6).astype(np.complex128).reshape((2, 3, 6))
     tensors = [unitary_left, unitary_mid, crandn(2, 6, 1)]
@@ -2511,15 +2512,27 @@ def _product_state_mps(length: int) -> MPS:
     return MPS(length=length, tensors=tensors, physical_dimensions=[pdim] * length)
 
 
-def test_get_max_bond() -> None:
-    """get_max_bond reports max over index-0/2 across tensors."""
-    # Shapes chosen so the per-tensor max(phys_dim, right_bond) are 3, 4, 2 → global 4
-    t1 = np.zeros((2, 1, 3), dtype=complex)
-    t2 = np.zeros((2, 3, 4), dtype=complex)
-    t3 = np.zeros((2, 4, 1), dtype=complex)
-    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=[2, 2, 2])
+@pytest.mark.parametrize("physical_dimensions", [[2, 2, 2], [7, 5, 6]])
+def test_get_max_bond(physical_dimensions: list[int]) -> None:
+    """The largest virtual bond determines the diagnostic, regardless of local dimensions."""
+    t1 = np.zeros((physical_dimensions[0], 1, 3), dtype=complex)
+    t2 = np.zeros((physical_dimensions[1], 3, 4), dtype=complex)
+    t3 = np.zeros((physical_dimensions[2], 4, 1), dtype=complex)
+    mps = MPS(length=3, tensors=[t1, t2, t3], physical_dimensions=physical_dimensions)
 
     assert mps.get_max_bond() == 4
+
+
+@pytest.mark.parametrize("length", [1, 3])
+@pytest.mark.parametrize("physical_dimension", [2, 5])
+def test_get_max_bond_product_state(length: int, physical_dimension: int) -> None:
+    """Product states report bond dimension one, including in recorded diagnostics."""
+    mps = MPS(length, physical_dimensions=[physical_dimension] * length, state="zeros")
+
+    assert mps.get_max_bond() == 1
+    diagnostics = np.zeros((3, 1))
+    mps.record_diagnostics(diagnostics, 0)
+    assert diagnostics[1, 0] == 1
 
 
 def test_get_total_bond() -> None:
@@ -2818,17 +2831,34 @@ def test_bond_diagnostics_reject_invalid_sites(
         getattr(mps, method_name)(sites)
 
 
-def test_get_schmidt_spectrum_product_padding() -> None:
-    """get_schmidt_spectrum returns [1, nan, …] for product cut; length=500."""
-    mps = _product_state_mps(3)
-    spec = mps.get_schmidt_spectrum([0, 1])
+@pytest.mark.parametrize("entangled_blocks", [False, True], ids=["product", "bell_blocks"])
+@pytest.mark.parametrize("scale", [1.0, 2.0j, 0.0], ids=["normalized", "scaled", "zero"])
+def test_get_schmidt_spectrum_rank_one_scale_and_padding(*, entangled_blocks: bool, scale: complex) -> None:
+    """A rank-one spectrum retains the state norm without changing the source MPS.
+
+    Args:
+        entangled_blocks: Whether each side of the cut contains a Bell pair.
+        scale: Global amplitude applied outside the measured pair.
+    """
+    if entangled_blocks:
+        mps = MPS(length=4, tensors=_bell_pair_mps().tensors + _bell_pair_mps().tensors)
+    else:
+        mps = MPS(length=4, state="zeros")
+    mps.tensors[0] *= scale
+    expected = _dense_schmidt_values(mps, 1)
+    before = copy.deepcopy(mps.tensors)
+    center = mps.orthogonality_center
+
+    spec = mps.get_schmidt_spectrum([1, 2])
 
     assert isinstance(spec, np.ndarray)
     assert spec.dtype == np.float64
     assert spec.shape == (500,)
-    assert np.isclose(spec[0], 1.0, atol=1e-12)
-    # the remainder must be NaN
+    assert spec[0] == pytest.approx(expected[0], abs=1e-12)
     assert np.all(np.isnan(spec[1:]))
+    assert mps.orthogonality_center == center
+    for actual, original in zip(mps.tensors, before, strict=True):
+        np.testing.assert_array_equal(actual, original)
 
 
 def test_get_schmidt_spectrum_bell_pair_values_and_padding() -> None:
