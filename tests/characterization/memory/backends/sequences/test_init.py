@@ -5,15 +5,14 @@
 #
 # Licensed under the MIT License
 
-"""Tests for the sequences backend package re-exports."""
+"""Tests for the sequences backend package exports."""
 
 from __future__ import annotations
 
 import mqt.yaqs.characterization.memory.backends.sequences as sequences_pkg
-from mqt.yaqs.characterization.memory.backends.sequences import simulate_sequences
 
 
-def test_sequences_package_reexports_simulate_sequences() -> None:
-    """The public sequences package exposes simulate_sequences."""
-    assert "simulate_sequences" in sequences_pkg.__all__
-    assert callable(simulate_sequences)
+def test_sequences_package_has_no_public_execution_helpers() -> None:
+    """Sequence execution is provided through MemoryCharacterizer."""
+    assert sequences_pkg.__all__ == []
+    assert not hasattr(sequences_pkg, "simulate_sequences")

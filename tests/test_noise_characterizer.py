@@ -15,7 +15,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
+from mqt.yaqs.characterization.noise import NoiseCharacterizationResult
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
 from mqt.yaqs.noise_characterizer import NoiseCharacterizer
 from tests.characterization.noise.fixtures import NoiseTestConfig, build_propagator

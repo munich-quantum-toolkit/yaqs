@@ -7,6 +7,4 @@
 
 """CMA-ES and bounded scalar optimizers for noise-parameter fitting."""
 
-from .cma import cma_opt
-
-__all__ = ["cma_opt"]
+__all__: list[str] = []

@@ -15,6 +15,7 @@ import sys
 import textwrap
 from typing import TYPE_CHECKING
 
+import pytest
 from qiskit.circuit import QuantumCircuit
 
 import mqt.yaqs.simulator as simulator_module
@@ -31,6 +32,11 @@ from mqt.yaqs import (
     Simulator,
     State,
 )
+from mqt.yaqs.characterization import memory, noise
+from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
+from mqt.yaqs.characterization.memory.operational_memory.results import CharacterizationResult
+from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
+from mqt.yaqs.characterization.noise.optimization.results import NoiseCharacterizationResult
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -79,6 +85,21 @@ def test_characterization_result_not_top_level() -> None:
     assert "_DigitalSegment" not in yaqs.__all__
 
 
+def test_memory_result_imports_preserve_type_identity() -> None:
+    """Supported memory imports identify the actual result and model classes."""
+    assert set(memory.__all__) == {"CharacterizationResult", "DenseProcessTensor", "MPOProcessTensor", "ProbeSet"}
+    assert memory.CharacterizationResult is CharacterizationResult
+    assert memory.DenseProcessTensor is DenseProcessTensor
+    assert memory.MPOProcessTensor is MPOProcessTensor
+    assert memory.ProbeSet is ProbeSet
+
+
+def test_noise_result_import_preserves_type_identity() -> None:
+    """The supported noise import identifies the class returned by NoiseCharacterizer."""
+    assert noise.__all__ == ["NoiseCharacterizationResult"]
+    assert noise.NoiseCharacterizationResult is NoiseCharacterizationResult
+
+
 def test_top_level_import_smoke() -> None:
     """Exercise the documented import path without ``core.data_structures``."""
     state = State(2, initial="zeros")
@@ -119,21 +140,48 @@ def test_program_specifications_are_available_from_top_level() -> None:
     assert program.get_state
 
 
-def test_top_level_import_needs_no_optional_matplotlib(tmp_path: Path) -> None:
-    """A warnings-as-errors import works when Matplotlib is unavailable."""
+@pytest.mark.parametrize(
+    "imports",
+    [
+        "import mqt.yaqs",
+        (
+            "from mqt.yaqs.characterization.memory import "
+            "CharacterizationResult, DenseProcessTensor, MPOProcessTensor, ProbeSet\n"
+            "from mqt.yaqs.characterization.noise import NoiseCharacterizationResult"
+        ),
+        (
+            "from mqt.yaqs.characterization.noise import NoiseCharacterizationResult\n"
+            "from mqt.yaqs.characterization.memory import "
+            "CharacterizationResult, DenseProcessTensor, MPOProcessTensor, ProbeSet"
+        ),
+    ],
+    ids=["top-level", "memory-first", "noise-first"],
+)
+def test_public_imports_need_no_optional_dependencies(tmp_path: Path, imports: str) -> None:
+    """Public imports work without Torch, plotting, or loading an optimization runner."""
     code = textwrap.dedent(
         """
-        import builtins
+        import importlib.abc
+        import sys
 
-        original_import = builtins.__import__
+        attempted = []
 
-        def import_without_matplotlib(name, globals=None, locals=None, fromlist=(), level=0):
-            if level == 0 and (name == "matplotlib" or name.startswith("matplotlib.")):
-                raise ImportError("Matplotlib is intentionally unavailable")
-            return original_import(name, globals, locals, fromlist, level)
+        class BlockOptionalDependencies(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split(".")[0] in {"torch", "matplotlib"}:
+                    attempted.append(fullname)
+                    raise ModuleNotFoundError(f"{fullname} is intentionally unavailable")
 
-        builtins.__import__ = import_without_matplotlib
-        import mqt.yaqs
+        sys.meta_path.insert(0, BlockOptionalDependencies())
+        """
+    )
+    code += imports + "\n"
+    code += textwrap.dedent(
+        """
+        assert not attempted, attempted
+        assert "cma" not in sys.modules
+        assert "mqt.yaqs.characterization.noise.optimization.run" not in sys.modules
+        assert "mqt.yaqs.characterization.memory.backends.surrogates.model" not in sys.modules
         """
     )
     environment = os.environ.copy()

@@ -19,7 +19,7 @@ import pytest
 from torch_support import requires_torch
 
 from mqt.yaqs import MPO, AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.operational_memory.results import CharacterizationResult
+from mqt.yaqs.characterization.memory import CharacterizationResult
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet, sample_probes
 from mqt.yaqs.characterization.memory.shared.utils import make_zero_psi
 

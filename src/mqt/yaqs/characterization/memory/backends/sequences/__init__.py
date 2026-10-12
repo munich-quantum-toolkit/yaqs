@@ -7,6 +7,4 @@
 
 """Simulate intervention sequences with Hamiltonian-based reference dynamics."""
 
-from .workflow import simulate_sequences
-
-__all__ = ["simulate_sequences"]
+__all__: list[str] = []

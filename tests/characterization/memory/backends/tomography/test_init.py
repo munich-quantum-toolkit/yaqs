@@ -10,11 +10,23 @@
 from __future__ import annotations
 
 from mqt.yaqs.characterization.memory.backends import tomography
+from mqt.yaqs.characterization.memory.backends.tomography.basis import TomographyBasis
+from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
 
 
 def test_tomography_package_reexports() -> None:
     """Public symbols resolve through the package import path."""
-    assert tomography.DenseProcessTensor is not None
-    assert tomography.MPOProcessTensor is not None
-    assert tomography.build_process_tensor is not None
-    assert tomography.TomographyBasis is not None
+    assert set(tomography.__all__) == {"DenseProcessTensor", "MPOProcessTensor", "TomographyBasis"}
+    assert tomography.DenseProcessTensor is DenseProcessTensor
+    assert tomography.MPOProcessTensor is MPOProcessTensor
+    assert tomography.TomographyBasis is TomographyBasis
+    for name in (
+        "assemble_fixed_basis",
+        "get_basis_states",
+        "get_choi_basis",
+        "SequenceData",
+        "build_process_tensor",
+        "evaluate_probes",
+        "compute_temporal_entropy",
+    ):
+        assert not hasattr(tomography, name), name

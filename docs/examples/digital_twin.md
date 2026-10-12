@@ -303,12 +303,28 @@ reference data without making the candidate simulations stochastic.
 
 ### Optimizer controls and results
 
-`sigma0` sets the initial CMA-ES search scale, and `popsize` sets the number of
-candidates per generation. A larger search budget or several starting points can
-help assess sensitivity to initialization. When there is only one free parameter
-with finite bounds, YAQS uses a bounded scalar search; `max_iter` then limits
-search evaluations rather than CMA-ES generations. Initial-model and final
-fitted-trajectory evaluations are outside either limit.
+Pass optimizer controls as keywords to `NoiseCharacterizer.characterize`:
+
+| Keyword    | Default | Meaning                                       |
+| ---------- | ------- | --------------------------------------------- |
+| `max_iter` | `500`   | Maximum CMA-ES generations.                   |
+| `popsize`  | `4`     | Candidates per generation; at least two.      |
+| `sigma0`   | `0.01`  | Positive initial search scale.                |
+| `seed`     | `None`  | Non-negative optimizer seed, or a fresh seed. |
+
+A larger search budget or several starting points can help assess sensitivity to
+initialization. When there is only one free parameter with finite bounds, YAQS
+uses a bounded scalar search; `max_iter` then limits search evaluations rather
+than CMA-ES generations. Initial-model and final fitted-trajectory evaluations
+are outside either limit.
+
+The returned
+{class}`~mqt.yaqs.characterization.noise.NoiseCharacterizationResult` is
+available for type annotations through:
+
+```python
+from mqt.yaqs.characterization.noise import NoiseCharacterizationResult
+```
 
 `fit.ref_traj`, `fit.fit_traj`, and `fit.times` retain the fitted-observable
 comparison. `fit.loss_history` stores candidate losses; it excludes the initial

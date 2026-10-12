@@ -17,8 +17,7 @@ import pytest
 
 import mqt.yaqs.characterization.memory.backends.tomography.constructor as constructor_module
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
-from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
-from mqt.yaqs.characterization.memory.backends.tomography.constructor import run_all_sequences
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor, run_all_sequences
 from mqt.yaqs.characterization.memory.operational_memory.samples import ProbeSet
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.noise_model import NoiseModel
