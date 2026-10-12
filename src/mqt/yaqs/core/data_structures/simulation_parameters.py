@@ -31,7 +31,7 @@ GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
 TDVPMode = Literal["1site", "2site", "dynamic"]
 
 
-class PresetTypes(TypedDict):
+class _PresetTypes(TypedDict):
     """Built-in numerical settings for a simulation preset."""
 
     svd_threshold: float
@@ -40,7 +40,7 @@ class PresetTypes(TypedDict):
     krylov_tol: float
 
 
-SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
+_SIMULATION_PRESETS: dict[SimulationPreset, _PresetTypes] = {
     "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 128, "krylov_tol": 1e-3},
     "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
     "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
@@ -56,7 +56,7 @@ def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
 
     Args:
         preset: Built-in simulation preset name. Must be one of ``"fast"``, ``"balanced"``,
-            ``"accurate"``, or ``"exact"`` (see ``SIMULATION_PRESETS``).
+            ``"accurate"``, or ``"exact"``.
 
     Returns:
         The validated preset name.
@@ -64,8 +64,8 @@ def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
     Raises:
         ValueError: If ``preset`` is not a supported preset name.
     """
-    if preset not in SIMULATION_PRESETS:
-        msg = f"preset must be one of {sorted(SIMULATION_PRESETS)!r}, got {preset!r}."
+    if preset not in _SIMULATION_PRESETS:
+        msg = f"preset must be one of {sorted(_SIMULATION_PRESETS)!r}, got {preset!r}."
         raise ValueError(msg)
     return preset
 
@@ -585,7 +585,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
-        preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
+        preset_values = _SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
         _validate_observable_mix(obs_list)
@@ -672,7 +672,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
-        preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
+        preset_values = _SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
         _validate_observable_mix(obs_list)
