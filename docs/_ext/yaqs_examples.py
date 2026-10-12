@@ -22,10 +22,14 @@ from jupyter_cache import get_cache
 from jupyter_cache.base import CacheBundleIn
 from myst_nb.core.read import is_myst_markdown_notebook, read_myst_markdown_notebook
 from sphinx.errors import SphinxError
+from sphinx.util import logging
 
 if TYPE_CHECKING:
     from nbformat import NotebookNode
     from sphinx.application import Sphinx
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _notebooks(app: Sphinx) -> dict[Path, NotebookNode]:
@@ -85,7 +89,7 @@ def _input_digest(notebook: NotebookNode) -> str:
 
 
 def _prepare_outputs(app: Sphinx) -> None:
-    """Require current saved outputs before publishing, then seed MyST's cache.
+    """Validate saved outputs before publishing, then seed MyST's cache.
 
     Raises:
         SphinxError: Saved outputs are missing, stale, or cannot be used safely.
@@ -106,8 +110,10 @@ def _prepare_outputs(app: Sphinx) -> None:
         msg = f"Missing or invalid example output manifest. {instruction}"
         raise SphinxError(msg) from error
     if manifest.get("runtime") != _runtime_digest(Path(app.srcdir).parent):
-        msg = f"Example outputs predate changes to package code or dependencies. {instruction}"
-        raise SphinxError(msg)
+        if app.config.yaqs_require_current_runtime:
+            msg = f"Example outputs predate changes to package code or dependencies. {instruction}"
+            raise SphinxError(msg)
+        LOGGER.info("Rendering saved example outputs from a different package or dependency revision.")
     cache = get_cache(app.env.mystnb_config.execution_cache_path)
     for relative, notebook in notebooks.items():
         entry = manifest.get("notebooks", {}).get(relative.as_posix())
@@ -183,6 +189,7 @@ def setup(app: Sphinx) -> dict[str, bool]:
         Parallel build support declarations.
     """
     app.add_config_value("yaqs_generate_examples", os.environ.get("YAQS_DOCS_EXECUTE") == "1", "env")
+    app.add_config_value("yaqs_require_current_runtime", default=True, rebuild="env")
     app.connect("builder-inited", _prepare_outputs, priority=600)
     app.connect("source-read", _output_dependencies)
     app.connect("build-finished", _save_outputs, priority=400)

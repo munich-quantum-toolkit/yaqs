@@ -265,22 +265,43 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
             path.unlink()
         else:
             path.write_text(replacement)
-        rejected = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
-            [sys.executable, "-m", "sphinx", "-E", "-W", "-b", "html", str(source), str(output)],
-            cwd=tmp_path,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        assert rejected.returncode != 0, str(path)
-        assert message in rejected.stdout + rejected.stderr
-        assert len(records.read_text().splitlines()) == 1
+        commands = [[sys.executable, "-m", "sphinx", "-E", "-W", "-b", "html", str(source), str(output)]]
+        if message != "package code or dependencies":
+            commands.append([Template(argument).substitute(environment) for argument in shlex.split(command)])
+        for build_command in commands:
+            rejected = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+                build_command,
+                cwd=tmp_path,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert rejected.returncode != 0, str(path)
+            assert message in rejected.stdout + rejected.stderr
+            assert len(records.read_text().splitlines()) == 1
         if previous is None:
             path.unlink()
         else:
             path.write_text(previous)
+
+    # RTD can publish intact snapshots while CI checks the current runtime.
+    package.write_text("changed = True\n")
+    (tmp_path / "uv.lock").write_text("changed dependencies\n")
+    published = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+        [Template(argument).substitute(environment) for argument in shlex.split(command)],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert published.returncode == 0, published.stdout + published.stderr
+    assert "different package or dependency revision" in published.stdout
+    assert "NOTEBOOK_RESULT_42" in (output / "index.html").read_text()
+    assert len(records.read_text().splitlines()) == 1
 
 
 @pytest.mark.parametrize("missing_reference", [False, True])

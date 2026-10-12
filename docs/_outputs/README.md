@@ -32,7 +32,13 @@ execution environment. Generated version strings do not invalidate outputs.
 Examples that read additional data files must also include those files in the
 input check in `docs/_ext/yaqs_examples.py`.
 
-Read the Docs and ordinary local builds still use the committed snapshots. They
-do not download GitHub Actions artifacts. Updating those snapshots for
-publication remains a separate step; the CI artifact can supply the new
-notebooks and manifest without local execution.
+Read the Docs publishes the committed snapshots. It checks executable cells,
+notebook settings, and saved-file hashes, but permits a different package or
+dependency fingerprint with `yaqs_require_current_runtime=0`. Its figures show
+the last committed execution; GitHub Actions validates execution against the
+current code. CI and ordinary local builds require a matching runtime by
+default.
+
+Refresh publication figures deliberately from the CI artifact when the results
+change or before a release. No local execution is needed. Read the Docs does not
+download GitHub Actions artifacts or run guide notebooks.
