@@ -18,7 +18,7 @@ from scipy.linalg import expm
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams, EvolutionMode
+from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 from mqt.yaqs.core.methods.bug import bug, bug_sweep, build_trial_basis, prepare_canonical_site_tensors
 from mqt.yaqs.core.methods.decompositions import right_qr
 from mqt.yaqs.core.methods.tdvp.primitives import update_left_environment
@@ -296,7 +296,7 @@ def test_alternating_endpoints_uses_half_dt(monkeypatch: pytest.MonkeyPatch) -> 
             get_state=True,
             elapsed_time=1,
             dt=0.2,
-            evolution_mode=EvolutionMode.BUG,
+            evolution_mode="bug",
         ),
     )
     assert dts == pytest.approx([0.1, 0.1])
@@ -327,7 +327,7 @@ def test_compression_once_per_step(monkeypatch: pytest.MonkeyPatch) -> None:
             preset="exact",
             get_state=True,
             elapsed_time=1,
-            evolution_mode=EvolutionMode.BUG,
+            evolution_mode="bug",
         ),
     )
     assert counts["n"] == 1
@@ -343,7 +343,7 @@ def test_normalize_after_compression() -> None:
             preset="exact",
             get_state=True,
             elapsed_time=1,
-            evolution_mode=EvolutionMode.BUG,
+            evolution_mode="bug",
         ),
     )
     assert abs(mps.norm()) == pytest.approx(1.0, abs=1e-10)
@@ -370,7 +370,7 @@ def test_bug_asymmetric_matches_mps_ordered_dense_reference() -> None:
             get_state=True,
             elapsed_time=1,
             dt=dt,
-            evolution_mode=EvolutionMode.BUG,
+            evolution_mode="bug",
             max_bond_dim=None,
             krylov_tol=1e-12,
         ),
@@ -399,7 +399,7 @@ def test_alternating_asymmetric_matches_dense_without_mock() -> None:
         get_state=True,
         elapsed_time=total_time,
         dt=dt,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug",
         max_bond_dim=None,
         krylov_tol=1e-12,
     )

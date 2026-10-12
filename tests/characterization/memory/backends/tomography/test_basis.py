@@ -15,7 +15,6 @@ from typing import Any
 
 import numpy as np
 
-from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.basis import (
     _finalize_sequence_averages,
     assemble_fixed_basis,
@@ -23,6 +22,7 @@ from mqt.yaqs.characterization.memory.backends.tomography.basis import (
     get_basis_states,
     get_choi_basis,
 )
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.simulation_parameters import AnalogSimParams
 

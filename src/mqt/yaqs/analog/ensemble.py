@@ -7,6 +7,8 @@
 
 """Ensemble evolution helpers for analog simulations."""
 
+# Simulation workers share private MPS buffer writers.
+
 from __future__ import annotations
 
 import copy
@@ -14,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..core.data_structures.result import allocate_worker_observable_buffer
+from ..core.data_structures.result import _allocate_worker_observable_buffer
 from .evolution import apply_unitary_evolution
 
 if TYPE_CHECKING:
@@ -87,9 +89,9 @@ def ensemble_member_worker(
     num_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
-        observable_results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
+        observable_results = _allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        observable_results = allocate_worker_observable_buffer(sim_params, 1)
+        observable_results = _allocate_worker_observable_buffer(sim_params, 1)
 
     phis: list[MPS] = []
     multi_time_results: NDArray[np.complex128] | None = None
@@ -107,14 +109,14 @@ def ensemble_member_worker(
             phis.append(phi_b)
 
     if sim_params.sample_timesteps:
-        state.record_diagnostics(diagnostics, 0)
-        state.evaluate_observables(sim_params, observable_results, 0)
+        state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+        state._evaluate_observables(sim_params, observable_results, 0)  # ruff: ignore[private-member-access]
         if multi_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
                 multi_time_results[p, 0] = phis[p].mixed_expectation(state, probe_a)
     elif last_index == 0:
-        state.record_diagnostics(diagnostics, 0)
-        state.evaluate_observables(sim_params, observable_results)
+        state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+        state._evaluate_observables(sim_params, observable_results)  # ruff: ignore[private-member-access]
         if multi_time_results is not None:
             for p, (probe_a, _b_op) in enumerate(pairs):
                 multi_time_results[p, 0] = phis[p].mixed_expectation(state, probe_a)
@@ -124,14 +126,14 @@ def ensemble_member_worker(
         _step_correlator_phis(sim_params, hamiltonian, phis)
 
         if sim_params.sample_timesteps:
-            state.record_diagnostics(diagnostics, j)
-            state.evaluate_observables(sim_params, observable_results, j)
+            state._record_diagnostics(diagnostics, j)  # ruff: ignore[private-member-access]
+            state._evaluate_observables(sim_params, observable_results, j)  # ruff: ignore[private-member-access]
             if multi_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
                     multi_time_results[p, j] = phis[p].mixed_expectation(state, probe_a)
         elif j == last_index:
-            state.record_diagnostics(diagnostics, 0)
-            state.evaluate_observables(sim_params, observable_results)
+            state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+            state._evaluate_observables(sim_params, observable_results)  # ruff: ignore[private-member-access]
             if multi_time_results is not None:
                 for p, (probe_a, _b_op) in enumerate(pairs):
                     multi_time_results[p, 0] = phis[p].mixed_expectation(state, probe_a)

@@ -33,7 +33,6 @@ from mqt.yaqs.core.parallel_utils import (
     unpack_flat_job,
     worker_init,
 )
-from mqt.yaqs.simulator import available_cpus as simulator_available_cpus
 
 
 def _indexed_pool_worker(job_idx: int, payload: dict[str, Any] | None = None) -> tuple[int, int]:
@@ -130,11 +129,6 @@ def test_available_cpus_slurm_malformed_falls_through(monkeypatch: pytest.Monkey
     monkeypatch.setenv("SLURM_CPUS_PER_TASK", "not-a-number")
     monkeypatch.setenv("SLURM_CPUS_ON_NODE", "0")
     assert parallel_utils.available_cpus() >= 1
-
-
-def test_simulator_reexports_available_cpus() -> None:
-    """``simulator.available_cpus`` remains a public alias for the core helper."""
-    assert simulator_available_cpus is parallel_utils.available_cpus
 
 
 def test_threading_config() -> None:

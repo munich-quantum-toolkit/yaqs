@@ -304,11 +304,10 @@ Before using a larger or more demanding model, check convergence separately:
 | Use `balanced` or `accurate`        | Whether tighter truncation and solver settings change the observables. Keep an explicit trajectory budget when comparing numerical settings. |
 | Increase `length` or `elapsed_time` | Whether boundaries, entanglement growth, and runtime affect the question being studied.                                                      |
 
-The default MPS evolution uses TDVP updates. To use the BUG integrator, import
-`EvolutionMode` from `mqt.yaqs` and set `evolution_mode=EvolutionMode.BUG` in
-`AnalogSimParams`. For TDVP, `tdvp_sweeps` adds unitary substeps without
-changing the noise timestep. See {doc}`simulation_parameters` for these advanced
-choices.
+The default MPS evolution uses TDVP updates. To use the BUG integrator, set
+`evolution_mode="bug"` in `AnalogSimParams`. For TDVP, `tdvp_sweeps` adds
+unitary substeps without changing the noise timestep. See
+{doc}`simulation_parameters` for these advanced choices.
 
 ## Related topics
 

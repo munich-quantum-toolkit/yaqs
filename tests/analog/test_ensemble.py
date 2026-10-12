@@ -19,7 +19,6 @@ from mqt.yaqs import AnalogSimParams, Hamiltonian, NoiseModel, Observable, Simul
 from mqt.yaqs.analog.ensemble import ensemble_member_worker
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.data_structures.simulation_parameters import EvolutionMode
 from tests.site_order_reference import embed_local_operator, mixed_radix_index
 
 
@@ -276,7 +275,7 @@ def test_unitary_ensemble_uses_bug_evolution_mode_via_simulator() -> None:
         observables=[Observable("z", 0)],
         elapsed_time=0.05,
         dt=0.05,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug",
         max_bond_dim=64,
         svd_threshold=1e-10,
     )
@@ -528,7 +527,7 @@ def test_bug_ensemble_correlator_preserves_scaled_probe_amplitude() -> None:
         observables=[z0],
         elapsed_time=0.2,
         dt=0.1,
-        evolution_mode=EvolutionMode.BUG,
+        evolution_mode="bug",
         multi_time_observables=[(z0, probe_b)],
         max_bond_dim=16,
         svd_threshold=1e-10,

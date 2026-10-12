@@ -53,16 +53,15 @@ from .core.data_structures.mps import MPS
 from .core.data_structures.noise_model import validate_noise_model_for_run
 from .core.data_structures.result import (
     Result,
-    aggregate_counts,
-    aggregate_diagnostics,
-    aggregate_trajectories,
-    allocate_diagnostic_buffers,
-    allocate_observable_buffers,
+    _aggregate_counts,
+    _aggregate_diagnostics,
+    _aggregate_trajectories,
+    _allocate_diagnostic_buffers,
+    _allocate_observable_buffers,
 )
 from .core.data_structures.simulation_parameters import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     _prepare_observable_ordering,
     _validate_order,
     _validate_simulation_controls,
@@ -75,7 +74,7 @@ from .core.data_structures.simulation_program import (
     _CompiledDigitalInstruction,
     _CompiledProgram,
     _expand_analog_operator,
-    stitch_program_results,
+    _stitch_program_results,
 )
 from .core.data_structures.state import State
 from .core.data_structures.state_utils import resolve_physical_dimensions, validate_qubit_measurement_dimensions
@@ -83,16 +82,18 @@ from .core.parallel_utils import (
     WORKER_CTX,
     ExecutionConfig,
     MPContext,
-    available_cpus,
     call_serial_capped,
     resolve_worker_ctx,
     run_backend_parallel,
+)
+from .core.parallel_utils import (
+    available_cpus as _available_cpus,
 )
 from .core.random_utils import make_disorder_rng, make_trajectory_rng
 from .digital.digital_tjm import _compile_circuit, _CompiledCircuit, digital_tjm
 from .digital.utils.qasm_utils import load_circuit
 
-__all__ = ["Simulator", "available_cpus"]
+__all__ = ["Simulator"]
 
 
 def _select_analog_tjm_backend(order: int) -> Callable[..., Any]:
@@ -372,7 +373,7 @@ def _analog_runs_can_merge(left: _CompiledAnalogInstruction, right: _CompiledAna
     """Return whether two adjacent analog segments share one ``analog_tjm`` schedule."""
     left_params = left.execution_params
     right_params = right.execution_params
-    if left_params.evolution_mode != EvolutionMode.TDVP or right_params.evolution_mode != EvolutionMode.TDVP:
+    if left_params.evolution_mode != "tdvp" or right_params.evolution_mode != "tdvp":
         return False
     if left.sim_params.get_state or right.sim_params.get_state:
         return False
@@ -831,7 +832,7 @@ def _prepare_result_observables(
 ) -> None:
     """Deep-copy user-ordered observables and allocate compatible output buffers."""
     result.observables = [copy.deepcopy(obs) for obs in sim_params.observables]
-    trajectories, expectation_values, times = allocate_observable_buffers(
+    trajectories, expectation_values, times = _allocate_observable_buffers(
         sim_params if buffer_params is None else buffer_params,
         len(result.observables),
         num_traj=num_traj,
@@ -871,7 +872,7 @@ def _allocate_program_segment_results(
             )
             # Keep the sampling-aware time grid from ``_prepare_result_observables``
             # (full ``sim_params.times`` when ``sample_timesteps``, else final time only).
-            diag_per_traj, _ = allocate_diagnostic_buffers(
+            diag_per_traj, _ = _allocate_diagnostic_buffers(
                 execution_params,
                 num_traj=effective_num_traj,
             )
@@ -892,7 +893,7 @@ def _allocate_program_segment_results(
             if shots_only:
                 diag_per_traj = None
             else:
-                diag_per_traj, _ = allocate_diagnostic_buffers(
+                diag_per_traj, _ = _allocate_diagnostic_buffers(
                     digital_params,
                     num_traj=effective_num_traj,
                 )
@@ -1066,7 +1067,8 @@ class Simulator:
         Args:
             parallel: Enable a process pool for multiple jobs and workers.
             max_workers: Positive worker-process cap. ``None`` selects
-                ``max(1, available_cpus() - 1)``; one runs in the current process.
+                one fewer than the available CPUs, with a minimum of one.
+                One worker runs in the current process.
             show_progress: Display trajectory and shot-readout progress bars.
             mp_context: ``"auto"``, ``"fork"``, or ``"spawn"``. Automatic selection
                 uses ``"forkserver"`` on Linux and ``"spawn"`` elsewhere.
@@ -1372,21 +1374,21 @@ class Simulator:
                     _program_worker,
                     traj_index,
                     payload,
-                    n_threads=1 if self.parallel and self.max_workers == 1 else available_cpus(),
+                    n_threads=1 if self.parallel and self.max_workers == 1 else _available_cpus(),
                 )
                 consume(traj_index, trajectory)
 
         for segment_result, diag_per_traj in zip(segment_results, diagnostic_buffers, strict=True):
             if segment_result.observables:
-                aggregate_trajectories(segment_result)
+                _aggregate_trajectories(segment_result)
             if diag_per_traj is not None:
-                segment_result.runtime_cost, segment_result.max_bond, segment_result.total_bond = aggregate_diagnostics(
-                    diag_per_traj
+                segment_result.runtime_cost, segment_result.max_bond, segment_result.total_bond = (
+                    _aggregate_diagnostics(diag_per_traj)
                 )
             if segment_result.measurements:
-                aggregate_counts(segment_result)
+                _aggregate_counts(segment_result)
 
-        expectation_values, times, counts = stitch_program_results(segment_results, compiled.observables)
+        expectation_values, times, counts = _stitch_program_results(segment_results, compiled.observables)
         result = Result(
             observables=[copy.deepcopy(obs) for obs in compiled.observables],
             expectation_values=expectation_values,
@@ -1493,8 +1495,8 @@ class Simulator:
             if state_rep != "mps":
                 msg = "Piecewise Hamiltonians currently require State.representation='mps'."
                 raise ValueError(msg)
-            if sim_params.evolution_mode != EvolutionMode.TDVP:
-                msg = "Piecewise Hamiltonians require evolution_mode=EvolutionMode.TDVP."
+            if sim_params.evolution_mode != "tdvp":
+                msg = "Piecewise Hamiltonians require evolution_mode='tdvp'."
                 raise ValueError(msg)
             if sim_params.multi_time_observables:
                 msg = "Piecewise Hamiltonians do not support multi_time_observables."
@@ -1536,7 +1538,7 @@ class Simulator:
 
         diag_per_traj: NDArray[np.float64] | None = None
         if state_rep == "mps":
-            diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
+            diag_per_traj, _ = _allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         payload: dict[str, Any]
         worker_fn: Callable[[int], Any]
@@ -1605,7 +1607,7 @@ class Simulator:
                     else:
                         final_mps = cast("MPS", traj_final)
         else:
-            n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
+            n_threads = 1 if self.parallel and self.max_workers == 1 else _available_cpus()
 
             args: list[Any]
             if state_rep == "vector":
@@ -1648,8 +1650,8 @@ class Simulator:
             _store_final_mps(result, final_mps)
 
         if diag_per_traj is not None:
-            result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
-        aggregate_trajectories(result)
+            result.runtime_cost, result.max_bond, result.total_bond = _aggregate_diagnostics(diag_per_traj)
+        _aggregate_trajectories(result)
 
     # -----------------------------------------------------------------------
     # Digital (circuit) simulation
@@ -1708,7 +1710,7 @@ class Simulator:
 
         diag_per_traj: NDArray[np.float64] | None = None
         if not shots_only:
-            diag_per_traj, _ = allocate_diagnostic_buffers(
+            diag_per_traj, _ = _allocate_diagnostic_buffers(
                 sim_params,
                 num_traj=effective_num_traj,
                 num_mid_measurements=effective_num_mid_measurements,
@@ -1778,7 +1780,7 @@ class Simulator:
                     traj_data, traj_diag, shot_counts, traj_final = traj_payload
                     _consume(i, traj_data, traj_diag, shot_counts, traj_final)
             else:
-                n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
+                n_threads = 1 if self.parallel and self.max_workers == 1 else _available_cpus()
                 iterator = tqdm(
                     range(effective_num_traj),
                     desc="Running trajectories",
@@ -1799,11 +1801,11 @@ class Simulator:
 
         _store_final_mps(result, final_mps)
         if diag_per_traj is not None:
-            result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
+            result.runtime_cost, result.max_bond, result.total_bond = _aggregate_diagnostics(diag_per_traj)
         if wants_obs:
-            aggregate_trajectories(result)
+            _aggregate_trajectories(result)
         if wants_shots:
-            aggregate_counts(result)
+            _aggregate_counts(result)
 
     def _run_circuit(
         self,
@@ -1903,7 +1905,7 @@ class Simulator:
 
         _prepare_result_observables(result, sim_params, num_traj=effective_num_traj)
         worker_params = cast("AnalogSimParams", _worker_sim_params(sim_params))
-        diag_per_traj, _ = allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
+        diag_per_traj, _ = _allocate_diagnostic_buffers(sim_params, num_traj=effective_num_traj)
 
         n_pairs = len(sim_params.multi_time_observables)
         n_cols = len(sim_params.times) if sim_params.sample_timesteps else 1
@@ -1939,7 +1941,7 @@ class Simulator:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
         else:
-            n_threads = 1 if self.parallel and self.max_workers == 1 else available_cpus()
+            n_threads = 1 if self.parallel and self.max_workers == 1 else _available_cpus()
             args = [(i, initial_states[i], worker_params, operator) for i in range(len(initial_states))]
             iterator = tqdm(args, desc="Running unitary ensemble", ncols=80, disable=not self.show_progress)
             for i, arg in enumerate(iterator):
@@ -1952,7 +1954,7 @@ class Simulator:
                     assert multi_time_result is not None
                     multi_time_matrix[i] = multi_time_result
 
-        result.runtime_cost, result.max_bond, result.total_bond = aggregate_diagnostics(diag_per_traj)
-        aggregate_trajectories(result)
+        result.runtime_cost, result.max_bond, result.total_bond = _aggregate_diagnostics(diag_per_traj)
+        _aggregate_trajectories(result)
         if multi_time_matrix is not None:
             result.multi_time_results = np.mean(multi_time_matrix, axis=0)

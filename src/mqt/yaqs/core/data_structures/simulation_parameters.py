@@ -16,7 +16,6 @@ time, time steps, bond dimension limits, and thresholds. Simulation outputs are 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import Enum
 from typing import Literal, TypedDict, cast
 
 import numpy as np
@@ -31,7 +30,7 @@ GateMode = Literal["tdvp", "full-tdvp", "swaps", "mpo"]
 TDVPMode = Literal["1site", "2site", "dynamic"]
 
 
-class PresetTypes(TypedDict):
+class _PresetTypes(TypedDict):
     """Built-in numerical settings for a simulation preset."""
 
     svd_threshold: float
@@ -40,7 +39,7 @@ class PresetTypes(TypedDict):
     krylov_tol: float
 
 
-SIMULATION_PRESETS: dict[SimulationPreset, PresetTypes] = {
+_SIMULATION_PRESETS: dict[SimulationPreset, _PresetTypes] = {
     "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 128, "krylov_tol": 1e-3},
     "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
     "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
@@ -56,7 +55,7 @@ def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
 
     Args:
         preset: Built-in simulation preset name. Must be one of ``"fast"``, ``"balanced"``,
-            ``"accurate"``, or ``"exact"`` (see ``SIMULATION_PRESETS``).
+            ``"accurate"``, or ``"exact"``.
 
     Returns:
         The validated preset name.
@@ -64,8 +63,8 @@ def _validate_preset(preset: SimulationPreset) -> SimulationPreset:
     Raises:
         ValueError: If ``preset`` is not a supported preset name.
     """
-    if preset not in SIMULATION_PRESETS:
-        msg = f"preset must be one of {sorted(SIMULATION_PRESETS)!r}, got {preset!r}."
+    if preset not in _SIMULATION_PRESETS:
+        msg = f"preset must be one of {sorted(_SIMULATION_PRESETS)!r}, got {preset!r}."
         raise ValueError(msg)
     return preset
 
@@ -350,13 +349,6 @@ def _resolve_max_bond_dim(max_bond_dim: int | object | None, preset_value: int |
     return validate_integer(max_bond_dim, name="max_bond_dim", minimum=1)
 
 
-class EvolutionMode(Enum):
-    """Enumerates the different modes of tensor evolution in the simulation."""
-
-    TDVP = "tdvp"
-    BUG = "bug"
-
-
 _ALLOWED_TRUNC_MODES = frozenset({
     "discarded_weight",
     "relative",
@@ -387,26 +379,23 @@ def _validate_trunc_mode(trunc_mode: str) -> TruncMode:
     return cast("TruncMode", trunc_mode)
 
 
-def _validate_evolution_mode(evolution_mode: EvolutionMode | str) -> EvolutionMode:
-    """Validate and coerce the analog evolution mode.
+def _validate_evolution_mode(evolution_mode: str) -> Literal["tdvp", "bug"]:
+    """Validate the analog evolution mode.
 
     Args:
-        evolution_mode: Evolution mode enum or string value.
+        evolution_mode: ``"tdvp"`` or ``"bug"``.
 
     Returns:
-        The validated :class:`EvolutionMode`.
+        The validated mode string.
 
     Raises:
         ValueError: If ``evolution_mode`` is not a supported value.
     """
-    if isinstance(evolution_mode, EvolutionMode):
+    allowed = ("tdvp", "bug")
+    if isinstance(evolution_mode, str) and evolution_mode in allowed:
         return evolution_mode
-    try:
-        return EvolutionMode(evolution_mode)
-    except ValueError as exc:
-        allowed = tuple(mode.value for mode in EvolutionMode)
-        msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
-        raise ValueError(msg) from exc
+    msg = f"evolution_mode must be one of {allowed!r}, got {evolution_mode!r}."
+    raise ValueError(msg)
 
 
 def _validate_observable_mix(observables: list[Observable]) -> None:
@@ -512,13 +501,13 @@ class _ObservableOrderingMixin:
     observables: list[Observable]
 
     @property
-    def sorted_observables(self) -> list[Observable]:
+    def _sorted_observables(self) -> list[Observable]:
         """Observables sorted by site for efficient MPS evaluation."""
         sorted_obs, _indices = _prepare_observable_ordering(self.observables)
         return sorted_obs
 
     @property
-    def observable_sorted_indices(self) -> tuple[int, ...]:
+    def _observable_sorted_indices(self) -> tuple[int, ...]:
         """Maps each user-list index to the corresponding sorted worker-buffer row."""
         _sorted_obs, indices = _prepare_observable_ordering(self.observables)
         return indices
@@ -532,8 +521,6 @@ class AnalogSimParams(_ObservableOrderingMixin):
 
     Attributes:
         times: Sample times from zero through ``elapsed_time``, spaced by ``dt``.
-        sorted_observables: Observables sorted by site for MPS evaluation.
-        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     def __init__(
@@ -550,7 +537,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
         *,
         preset: SimulationPreset = "balanced",
         sample_timesteps: bool = True,
-        evolution_mode: EvolutionMode | str = EvolutionMode.TDVP,
+        evolution_mode: Literal["tdvp", "bug"] = "tdvp",
         get_state: bool = False,
         random_seed: int | None = None,
         multi_time_observables: list[tuple[Observable, Observable]] | None = None,
@@ -575,7 +562,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
                 Sets ``num_traj``, ``max_bond_dim``, ``svd_threshold``, and ``krylov_tol``;
                 explicit values override it. ``"exact"`` still has timestep and sampling error.
             sample_timesteps: Record every time step rather than only the final values.
-            evolution_mode: ``EvolutionMode.TDVP`` or ``EvolutionMode.BUG`` for MPS evolution.
+            evolution_mode: ``"tdvp"`` (default) or ``"bug"`` for MPS evolution.
             get_state: Retain the final state in :class:`~mqt.yaqs.Result`.
             random_seed: Seed for stochastic jumps and static noise sampling.
             multi_time_observables: One- or two-site pairs ``(A, B)`` for noiseless
@@ -585,7 +572,7 @@ class AnalogSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
-        preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
+        preset_values = _SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
         _validate_observable_mix(obs_list)
@@ -619,8 +606,6 @@ class DigitalSimParams(_ObservableOrderingMixin):
 
     Attributes:
         dt: Compatibility time step for analog evolution helpers.
-        sorted_observables: Observables sorted by site for MPS evaluation.
-        observable_sorted_indices: Map from user observable order to sorted worker rows.
     """
 
     dt = 1
@@ -672,7 +657,7 @@ class DigitalSimParams(_ObservableOrderingMixin):
             tdvp_mode: TDVP geometry: ``"1site"``, ``"2site"``, or ``"dynamic"``.
         """
         normalized_seed = _validate_random_seed(random_seed)
-        preset_values = SIMULATION_PRESETS[_validate_preset(preset)]
+        preset_values = _SIMULATION_PRESETS[_validate_preset(preset)]
         self.preset = preset
         obs_list: list[Observable] = [] if observables is None else list(observables)
         _validate_observable_mix(obs_list)

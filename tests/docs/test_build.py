@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -21,6 +22,9 @@ from pathlib import Path
 from string import Template
 
 import pytest
+
+from mqt import yaqs
+from mqt.yaqs.characterization import memory, noise
 
 
 def _write_configuration(source: Path, extensions: list[str], extra: str = "") -> None:
@@ -80,6 +84,17 @@ def test_documentation_ci_uses_executed_outputs() -> None:
     assert output.as_posix() in paths
     artifact_root = Path(os.path.commonpath(paths))
     assert Path(download["with"]["path"]) / output.relative_to(artifact_root) == output
+
+
+def test_api_reference_covers_supported_package_imports() -> None:
+    """All documented package exports have entries in the curated reference."""
+    pytest.importorskip("pybtex")
+    configuration = Path(__file__).parents[2] / "docs" / "conf.py"
+    public_api = runpy.run_path(str(configuration))["yaqs_public_api"]
+    for module in (yaqs, memory, noise):
+        prefix = module.__name__ + "."
+        documented = {name.removeprefix(prefix) for name in public_api if name.rsplit(".", 1)[0] == module.__name__}
+        assert documented == set(module.__all__) - {"__version__", "version_info"}
 
 
 @pytest.mark.parametrize("missing_source", [False, True])
@@ -304,8 +319,12 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
     assert len(records.read_text().splitlines()) == 1
 
 
-@pytest.mark.parametrize("missing_reference", [False, True])
-def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool) -> None:
+@pytest.mark.parametrize(
+    ("missing_reference", "missing_export"),
+    [(False, False), (True, False), (False, True)],
+    ids=["curated-api", "unresolved-reference", "missing-supported-export"],
+)
+def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool, missing_export: bool) -> None:
     """API pages include constructor settings and resolve public aliases and types."""
     pytest.importorskip("sphinx")
     pytest.importorskip("autoapi")
@@ -315,13 +334,20 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     source.mkdir()
     package = tmp_path / "src" / "example_api"
     package.mkdir(parents=True)
-    (package / "__init__.py").write_text('from .model import Example, model\n__all__ = ["Example", "model"]\n')
+    (package / "__init__.py").write_text(
+        'from .model import Example, InternalType, model\n__all__ = ["Example", "InternalType", "model"]\n'
+    )
+    (package / "implementation.py").write_text('from .model import Example\n__all__ = ["Example"]\n')
     legacy_module = package / "legacy.py"
     legacy_module.write_text('"""A module that will be removed between builds."""\n')
     (package / "model.py").write_text(
         "from __future__ import annotations\n"
         "import numpy as np\n"
         "from numpy.typing import NDArray\n\n"
+        "class InternalType:\n"
+        '    """An implementation detail."""\n\n'
+        "def worker() -> None:\n"
+        '    """An execution helper."""\n\n'
         "class Example:\n"
         '    """An example with documented attributes.\n\n'
         "    Attributes:\n"
@@ -334,13 +360,16 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
         "            weight: Initial weight for sampling.\n"
         '        """\n'
         "        self.weight = weight\n\n"
-        "    def sample(self, data: NDArray[np.float64], /, *, dtype: type) -> NDArray[np.float64]:\n"
+        "    def sample(self, data: NDArray[np.float64], /, *, dtype: type, "
+        "internal: InternalType | None = None) -> NDArray[np.float64]:\n"
         '        """Return the supplied values.\n\n'
         "        Args:\n"
         "            data (NDArray[np.float64]): Values to return.\n"
         "            dtype (type): Type used for sampling.\n"
         '        """\n'
         "        return data\n\n"
+        "    def _record(self) -> None:\n"
+        '        """Write an internal buffer."""\n\n'
         "def helper() -> int:\n"
         '    """A supported low-level helper."""\n'
         "    return 1\n"
@@ -365,7 +394,14 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
         ["autoapi.extension", "sphinx.ext.napoleon", "sphinx.ext.intersphinx", "sphinx_llm.txt", "yaqs_api"],
         f"autoapi_dirs = [{str(package)!r}]\n"
         "autoapi_add_toctree_entry = True\n"
-        f'intersphinx_mapping = {{"python": ("https://example.invalid/types/", {str(inventory)!r})}}\n',
+        "yaqs_public_api = {\n"
+        "    'example_api.Example': 'example_api.model.Example',\n"
+        "    'example_api.model': 'example_api.model.model',\n"
+        "    'example_api.model.helper': 'example_api.model.helper',\n"
+        "    'example_api.legacy': 'example_api.legacy',\n"
+        "}\n"
+        f'intersphinx_mapping = {{"python": ("https://example.invalid/types/", {str(inventory)!r})}}\n'
+        + ("yaqs_public_api['example_api.Missing'] = 'example_api.model.Missing'\n" if missing_export else ""),
     )
     (source / "index.rst").write_text(
         "API documentation\n=================\n\n"
@@ -385,6 +421,10 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
         timeout=60,
     )
     log = completed.stdout + completed.stderr
+    if missing_export:
+        assert completed.returncode != 0
+        assert "Supported API entry example_api.Missing must resolve to a rendered object" in log
+        return
     if missing_reference:
         assert completed.returncode != 0
         assert "reference target not found: example_api.DoesNotExist" in log
@@ -398,6 +438,7 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     model = (output / "api" / "example_api" / "model" / "index.html").read_text()
     index = (output / "index.html").read_text()
     assert "Public imports" in public
+    assert "InternalType" not in public
     assert 'href="model/index.html#example_api.model.Example"' in public
     assert 'id="example_api.Example"' not in public
     assert model.count('id="example_api.model.Example"') == 1
@@ -405,6 +446,11 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     assert "Weight used by the example." in model
     assert "Initial weight for sampling." in model
     assert 'id="example_api.model.helper"' in model
+    assert 'id="example_api.model.InternalType"' not in model
+    assert 'id="example_api.model.worker"' not in model
+    assert 'id="example_api.model.Example._record"' not in model
+    assert "InternalType" in model
+    assert 'href="#example_api.model.InternalType"' not in model
     description = index.split("<p>", 1)[1].split("</p>", 1)[0]
     for member in ("sample", "weight"):
         assert f'href="api/example_api/model/index.html#example_api.model.Example.{member}"' in description
@@ -432,8 +478,16 @@ def test_api_reexports_and_type_links(tmp_path: Path, *, missing_reference: bool
     )
     assert "example_api.model" in published["py:module"]
     assert published["py:function"]["example_api.model"].uri.endswith("#example_api.model.model")
+    for role in published.values():
+        assert not any(name.startswith("example_api.implementation") for name in role)
+        assert "example_api.InternalType" not in role
+        assert "example_api.model.InternalType" not in role
+        assert "example_api.model.worker" not in role
+        assert "example_api.model.Example._record" not in role
 
     legacy_module.unlink()
+    configuration = source / "conf.py"
+    configuration.write_text(configuration.read_text().replace("    'example_api.legacy': 'example_api.legacy',\n", ""))
     rebuilt = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
         [sys.executable, "-m", "sphinx", "-E", "-W", "-T", "-b", "html", str(source), str(output)],
         check=False,

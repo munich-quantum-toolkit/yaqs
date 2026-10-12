@@ -12,6 +12,8 @@ utilities for converting quantum circuits to DAG representations, processing gat
 matrix product states (MPS) and constructing generator MPOs.
 """
 
+# Simulation workers share private MPS buffer writers.
+
 from __future__ import annotations
 
 import copy
@@ -26,7 +28,7 @@ from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
 from ..core.data_structures.noise_model import NoiseModel
-from ..core.data_structures.result import allocate_worker_observable_buffer
+from ..core.data_structures.result import _allocate_worker_observable_buffer
 from ..core.data_structures.state_utils import validate_qubit_measurement_dimensions
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
@@ -779,12 +781,12 @@ def digital_tjm(
         diagnostics = np.zeros((3, num_cols), dtype=np.float64)
         if sim_params.sample_layers:
             state.normalize(form="B", decomposition="QR")
-            results = allocate_worker_observable_buffer(sim_params, mid + 2)
-            state.record_diagnostics(diagnostics, 0)
+            results = _allocate_worker_observable_buffer(sim_params, mid + 2)
+            state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
             if wants_obs:
-                state.evaluate_observables(sim_params, results, 0)
+                state._evaluate_observables(sim_params, results, 0)  # ruff: ignore[private-member-access]
         else:
-            results = allocate_worker_observable_buffer(sim_params, 1)
+            results = _allocate_worker_observable_buffer(sim_params, 1)
 
     if rng is None:
         rng = make_trajectory_rng(traj_idx, base_seed=sim_params.random_seed)
@@ -813,8 +815,8 @@ def digital_tjm(
                 col_idx += 1
                 assert diagnostics is not None
                 assert results is not None
-                state.record_diagnostics(diagnostics, col_idx)
-                state.evaluate_observables(sim_params, results, col_idx)
+                state._record_diagnostics(diagnostics, col_idx)  # ruff: ignore[private-member-access]
+                state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
 
     counts: dict[int, int] | None = None
     # The gate loop leaves the center on the last gate; returned states and following
@@ -837,9 +839,9 @@ def digital_tjm(
     assert diagnostics is not None
     assert results is not None
     final_col = results.shape[1] - 1
-    state.record_diagnostics(diagnostics, final_col)
+    state._record_diagnostics(diagnostics, final_col)  # ruff: ignore[private-member-access]
     if wants_obs:
-        state.evaluate_observables(sim_params, results, final_col)
+        state._evaluate_observables(sim_params, results, final_col)  # ruff: ignore[private-member-access]
 
     if wants_shots:
         per_call = _per_call_shots(sim_params, traj_idx)

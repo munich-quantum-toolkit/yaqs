@@ -9,3 +9,7 @@
 
 :class:`~mqt.yaqs.NoiseCharacterizer` provides the high-level interface.
 """
+
+from .optimization.results import NoiseCharacterizationResult
+
+__all__ = ["NoiseCharacterizationResult"]

@@ -18,7 +18,7 @@ import pytest
 
 import mqt.yaqs.characterization.memory.operational_memory.run as run_module
 from mqt.yaqs.characterization.memory.backends.exact import ExactBackend, simulate_exact
-from mqt.yaqs.characterization.memory.backends.tomography import build_process_tensor
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import DenseProcessTensor, MPOProcessTensor
 from mqt.yaqs.characterization.memory.operational_memory.response_matrix import (
     assemble_response_matrix,

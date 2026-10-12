@@ -13,7 +13,7 @@ import contextlib
 import copy
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -25,7 +25,6 @@ import mqt.yaqs.simulator as simulator_module
 from mqt.yaqs import (
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     Hamiltonian,
     NoiseModel,
     Observable,
@@ -516,6 +515,17 @@ def test_program_compilation_revalidates_mutated_order(monkeypatch: pytest.Monke
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
 
 
+@pytest.mark.parametrize("invalid", ["not-a-mode", None, True, ["tdvp"]])
+def test_program_revalidates_mutated_evolution_mode(invalid: object) -> None:
+    """Programs reject invalid integrator settings assigned after construction."""
+    params = AnalogSimParams()
+    program = SimulationProgram([(_zero_hamiltonian(2), params)], get_state=True)
+    params.evolution_mode = cast("Any", invalid)
+
+    with pytest.raises(ValueError, match="evolution_mode"):
+        Simulator(parallel=False, show_progress=False).run(State(2), program)
+
+
 def test_expand_analog_operator_returns_bare_mpo_for_static() -> None:
     """A static Hamiltonian expands to one MPO, not a long interval tuple."""
     hamiltonian = Hamiltonian.ising(2, J=1.0, g=0.5)
@@ -577,10 +587,10 @@ def test_program_compilation_rejects_piecewise_bug_evolution() -> None:
         (Hamiltonian.ising(2, J=1.0, g=2.0), 0.1),
     ])
     program = SimulationProgram(
-        [(piecewise, AnalogSimParams(elapsed_time=0.2, dt=0.1, evolution_mode=EvolutionMode.BUG))],
+        [(piecewise, AnalogSimParams(elapsed_time=0.2, dt=0.1, evolution_mode="bug"))],
         get_state=True,
     )
-    with pytest.raises(ValueError, match=r"evolution_mode=EvolutionMode\.TDVP"):
+    with pytest.raises(ValueError, match="evolution_mode='tdvp'"):
         Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), program)
 
 

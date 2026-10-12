@@ -200,9 +200,9 @@ state.
 
 :::{dropdown} Analog integrators and two-time correlations
 
-MPS analog evolution defaults to `evolution_mode=EvolutionMode.TDVP`. Import
-`EvolutionMode` from `mqt.yaqs` and select `EvolutionMode.BUG` to use the BUG
-integrator. See {doc}`analog_simulation` for the workflow.
+MPS analog evolution defaults to `evolution_mode="tdvp"`. Set
+`evolution_mode="bug"` to use the BUG integrator. The parameter stores the
+selected string. See {doc}`analog_simulation` for the workflow.
 
 `order=1` or `order=2` selects the TJM splitting order for noisy MPS evolution.
 This is separate from `tdvp_mode`, which controls the TDVP state updates:

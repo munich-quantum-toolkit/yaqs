@@ -11,6 +11,8 @@ Both schemes use TDVP or BUG for unitary intervals and return observable
 buffers, diagnostics, and an optional final state.
 """
 
+# Simulation workers share private MPS buffer writers.
+
 from __future__ import annotations
 
 import copy
@@ -19,7 +21,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..core.data_structures.mpo import MPO
-from ..core.data_structures.result import allocate_worker_observable_buffer
+from ..core.data_structures.result import _allocate_worker_observable_buffer
 from ..core.methods.dissipation import apply_dissipation
 from ..core.methods.scheduled_jumps import apply_scheduled_jumps, has_scheduled_jump
 from ..core.methods.stochastic_process import stochastic_process
@@ -182,11 +184,11 @@ def sample(
     if write_results:
         col = j if sim_params.sample_timesteps else 0
         if diagnostics is not None:
-            psi.record_diagnostics(diagnostics, col)
+            psi._record_diagnostics(diagnostics, col)  # ruff: ignore[private-member-access]
         if sim_params.sample_timesteps:
-            psi.evaluate_observables(sim_params, results, j)
+            psi._evaluate_observables(sim_params, results, j)  # ruff: ignore[private-member-access]
         else:
-            psi.evaluate_observables(sim_params, results)
+            psi._evaluate_observables(sim_params, results)  # ruff: ignore[private-member-access]
 
     if j == len(sim_params.times) - 1 and sim_params.get_state:
         return psi
@@ -268,9 +270,9 @@ def analog_tjm_2(
     num_cols = _diagnostic_num_columns(sim_params)
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
     if sim_params.sample_timesteps:
-        results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
+        results = _allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        results = allocate_worker_observable_buffer(sim_params, 1)
+        results = _allocate_worker_observable_buffer(sim_params, 1)
 
     final_state: MPS | None = None
 
@@ -296,11 +298,11 @@ def analog_tjm_2(
     # Zero-duration runs: evaluate the initial state before any noise/evolution (F0).
     if n_times == 1:
         if record(0):
-            state.record_diagnostics(diagnostics, 0)
+            state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
             if sim_params.sample_timesteps:
-                state.evaluate_observables(sim_params, results, 0)
+                state._evaluate_observables(sim_params, results, 0)  # ruff: ignore[private-member-access]
             else:
-                state.evaluate_observables(sim_params, results)
+                state._evaluate_observables(sim_params, results)  # ruff: ignore[private-member-access]
         return results, diagnostics, state if (sim_params.get_state or return_trajectory_state) else None
 
     if continue_trajectory:
@@ -318,8 +320,8 @@ def analog_tjm_2(
                 final_state = sampled_state
     else:
         if record(0):
-            state.record_diagnostics(diagnostics, 0)
-            state.evaluate_observables(sim_params, results, 0)
+            state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+            state._evaluate_observables(sim_params, results, 0)  # ruff: ignore[private-member-access]
 
         phi = initialize(state, noise_model, sim_params, rng=rng)
 
@@ -394,9 +396,9 @@ def analog_tjm_1(
     diagnostics = np.zeros((3, num_cols), dtype=np.float64)
 
     if sim_params.sample_timesteps:
-        results = allocate_worker_observable_buffer(sim_params, len(sim_params.times))
+        results = _allocate_worker_observable_buffer(sim_params, len(sim_params.times))
     else:
-        results = allocate_worker_observable_buffer(sim_params, 1)
+        results = _allocate_worker_observable_buffer(sim_params, 1)
 
     # Apply scheduled jumps at t=times[0] before the initial sample so observables
     # and get_state agree (later timesteps also sample after the jump event).
@@ -405,8 +407,8 @@ def analog_tjm_1(
 
     measure_initial = 0 in measure_at if measure_at is not None else sim_params.sample_timesteps
     if measure_initial:
-        state.record_diagnostics(diagnostics, 0)
-        state.evaluate_observables(sim_params, results, 0)
+        state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+        state._evaluate_observables(sim_params, results, 0)  # ruff: ignore[private-member-access]
 
     for j, _ in enumerate(sim_params.times[1:], start=1):
         apply_unitary_evolution(state, _mpo_for_interval(hamiltonian, j - 1), sim_params)
@@ -420,16 +422,16 @@ def analog_tjm_1(
 
         if record(j):
             col = j if sim_params.sample_timesteps else 0
-            state.record_diagnostics(diagnostics, col)
+            state._record_diagnostics(diagnostics, col)  # ruff: ignore[private-member-access]
             if sim_params.sample_timesteps:
-                state.evaluate_observables(sim_params, results, j)
+                state._evaluate_observables(sim_params, results, j)  # ruff: ignore[private-member-access]
             else:
-                state.evaluate_observables(sim_params, results)
+                state._evaluate_observables(sim_params, results)  # ruff: ignore[private-member-access]
 
     # Final-only runs with elapsed_time=0 never enter the loop above.
     if not measure_initial and not sim_params.sample_timesteps and n_times <= 1:
-        state.record_diagnostics(diagnostics, 0)
-        state.evaluate_observables(sim_params, results)
+        state._record_diagnostics(diagnostics, 0)  # ruff: ignore[private-member-access]
+        state._evaluate_observables(sim_params, results)  # ruff: ignore[private-member-access]
 
     final_state = state if sim_params.get_state else None
     return results, diagnostics, final_state

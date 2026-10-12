@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .state import State
 
 
-def allocate_observable_buffers(
+def _allocate_observable_buffers(
     sim_params: AnalogSimParams | DigitalSimParams,
     num_observables: int,
     *,
@@ -75,7 +75,7 @@ def allocate_observable_buffers(
     return trajectories, expectation_values, times
 
 
-def allocate_worker_observable_buffer(
+def _allocate_worker_observable_buffer(
     sim_params: AnalogSimParams | DigitalSimParams,
     num_samples: int,
 ) -> NDArray:
@@ -93,7 +93,7 @@ def allocate_worker_observable_buffer(
     return np.zeros((len(sim_params.observables), num_samples), dtype=dtype)
 
 
-def allocate_diagnostic_buffers(
+def _allocate_diagnostic_buffers(
     sim_params: AnalogSimParams | DigitalSimParams,
     *,
     num_traj: int,
@@ -122,7 +122,7 @@ def allocate_diagnostic_buffers(
     return per_traj, aggregate
 
 
-def aggregate_diagnostics(per_traj: NDArray[float64]) -> tuple[NDArray[float64], NDArray[float64], NDArray[float64]]:
+def _aggregate_diagnostics(per_traj: NDArray[float64]) -> tuple[NDArray[float64], NDArray[float64], NDArray[float64]]:
     """Mean over trajectories for each diagnostic row.
 
     Args:
@@ -135,7 +135,7 @@ def aggregate_diagnostics(per_traj: NDArray[float64]) -> tuple[NDArray[float64],
     return means[0], means[1], means[2]
 
 
-def aggregate_trajectories(result: Result) -> None:
+def _aggregate_trajectories(result: Result) -> None:
     """Average samples over trajectories, treating absent Schmidt ranks as zero.
 
     Spectrum columns absent from every trajectory retain NaN padding. A mean
@@ -151,7 +151,7 @@ def aggregate_trajectories(result: Result) -> None:
             result.expectation_values[i] = np.mean(trajectories, axis=0)
 
 
-def aggregate_counts(result: Result) -> None:
+def _aggregate_counts(result: Result) -> None:
     """Aggregate per-shot measurements into ``result.counts``.
 
     Sums counts across every non-``None`` entry in ``result.measurements`` so that

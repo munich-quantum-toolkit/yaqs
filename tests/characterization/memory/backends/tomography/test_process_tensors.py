@@ -17,12 +17,9 @@ import numpy as np
 import pytest
 
 from mqt.yaqs import AnalogSimParams, Hamiltonian, MemoryCharacterizer
+from mqt.yaqs.characterization.memory import DenseProcessTensor, MPOProcessTensor
 from mqt.yaqs.characterization.memory.backends.exact import simulate_exact
-from mqt.yaqs.characterization.memory.backends.tomography import (
-    DenseProcessTensor,
-    MPOProcessTensor,
-    build_process_tensor,
-)
+from mqt.yaqs.characterization.memory.backends.tomography.constructor import build_process_tensor
 from mqt.yaqs.characterization.memory.backends.tomography.process_tensors import (
     compute_entropy_dense,
     compute_temporal_entropy,

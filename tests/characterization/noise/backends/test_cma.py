@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from mqt.yaqs.characterization.noise.backends import cma as cma_backend
-from mqt.yaqs.characterization.noise.backends import cma_opt
+from mqt.yaqs.characterization.noise.backends.cma import cma_opt
 
 if TYPE_CHECKING:
     from collections.abc import Callable

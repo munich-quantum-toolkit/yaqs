@@ -2525,13 +2525,14 @@ def test_get_max_bond(physical_dimensions: list[int]) -> None:
 @pytest.mark.parametrize("length", [1, 3])
 @pytest.mark.parametrize("physical_dimension", [2, 5])
 def test_get_max_bond_product_state(length: int, physical_dimension: int) -> None:
-    """Product states report bond dimension one, including in recorded diagnostics."""
+    """Product-state diagnostics fill only the requested column and report bond dimension one."""
     mps = MPS(length, physical_dimensions=[physical_dimension] * length, state="zeros")
 
     assert mps.get_max_bond() == 1
-    diagnostics = np.zeros((3, 1))
-    mps.record_diagnostics(diagnostics, 0)
-    assert diagnostics[1, 0] == 1
+    diagnostics = np.full((3, 2), -1.0)
+    mps._record_diagnostics(diagnostics, 0)
+    np.testing.assert_array_equal(diagnostics[:, 0], [length - 1, 1, length - 1])
+    np.testing.assert_array_equal(diagnostics[:, 1], [-1.0, -1.0, -1.0])
 
 
 def test_get_total_bond() -> None:
@@ -2894,7 +2895,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     sim_diag = AnalogSimParams(diagnostics_and_meta, elapsed_time=0.1, dt=0.1)
 
     results_diag = np.empty((len(diagnostics_and_meta), 2), dtype=object)
-    mps.evaluate_observables(sim_diag, results_diag, column_index=0)
+    mps._evaluate_observables(sim_diag, results_diag, column_index=0)
 
     # Entropy
     assert isinstance(results_diag[0, 0], (float, np.floating))
@@ -2912,7 +2913,7 @@ def test_evaluate_observables_diagnostics_and_meta_then_pvm_separately() -> None
     sim_pvm = AnalogSimParams(pvm_only, elapsed_time=0.1, dt=0.1)
 
     results_pvm = np.empty((len(pvm_only), 1), dtype=object)
-    mps.evaluate_observables(sim_pvm, results_pvm, column_index=0)
+    mps._evaluate_observables(sim_pvm, results_pvm, column_index=0)
 
     assert results_pvm[0, 0] == 1
 
@@ -2942,14 +2943,14 @@ def test_evaluate_observables_reuses_working_state_for_sorted_bond_metrics(cente
 
     with patch.object(mps_mod, "copy") as copy_module:
         copy_module.deepcopy.side_effect = copy.deepcopy
-        state.evaluate_observables(sim_params, results)
+        state._evaluate_observables(sim_params, results)
 
     copy_module.deepcopy.assert_called_once_with(state)
     assert state.orthogonality_center == center
     for tensor, tensor_before in zip(state.tensors, tensors_before, strict=True):
         np.testing.assert_array_equal(tensor, tensor_before)
 
-    for obs_index, observable in enumerate(sim_params.sorted_observables):
+    for obs_index, observable in enumerate(sim_params._sorted_observables):
         assert isinstance(observable.sites, list)
         values = dense_values[observable.sites[0]]
         if observable.name == "entropy":
@@ -2980,7 +2981,7 @@ def test_evaluate_observables_local_ops_and_center_shifts() -> None:
     sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
 
     results = np.empty((len(obs_seq), 3), dtype=np.float64)
-    mps.evaluate_observables(sim_params, results, column_index=2)
+    mps._evaluate_observables(sim_params, results, column_index=2)
 
     z0, z1, x2, z3 = (results[i, 2] for i in range(4))
     assert np.isclose(z0, 1.0, atol=1e-12)
@@ -3035,11 +3036,11 @@ def test_evaluate_observables_rejects_non_real_result() -> None:
         patch.object(state, "local_expect", return_value=np.complex128(1.0 - 1e-6j)),
         pytest.raises(ValueError, match="observable expectation value"),
     ):
-        state.evaluate_observables(sim_params, results)
+        state._evaluate_observables(sim_params, results)
 
 
 def test_evaluate_observables_with_nonzero_initial_center() -> None:
-    """``evaluate_observables`` works when the copy starts away from site 0."""
+    """``_evaluate_observables`` works when the copy starts away from site 0."""
     mps = MPS(4, state="haar-random", pad=4)
     mps.normalize("B")
     mps.set_canonical_form(3)
@@ -3048,7 +3049,7 @@ def test_evaluate_observables_with_nonzero_initial_center() -> None:
     obs_seq = [Observable("z", s) for s in range(4)]
     sim_params = AnalogSimParams(obs_seq, elapsed_time=0.1, dt=0.1)
     results = np.empty((4, 1), dtype=np.float64)
-    mps.evaluate_observables(sim_params, results, column_index=0)
+    mps._evaluate_observables(sim_params, results, column_index=0)
 
     for site in range(4):
         assert results[site, 0] == pytest.approx(_dense_z_expectation(mps, site), abs=1e-9)
@@ -3298,7 +3299,7 @@ def test_evaluate_observables_rejects_invalid_diagnostic_sites(
     )
 
     with pytest.raises(error, match=match):
-        mps.evaluate_observables(sim_params, np.empty((1, 1), dtype=object), column_index=0)
+        mps._evaluate_observables(sim_params, np.empty((1, 1), dtype=object), column_index=0)
 
 
 @pytest.mark.parametrize("bitstring", [None, 1])
@@ -3309,7 +3310,7 @@ def test_evaluate_observables_rejects_malformed_bitstring_observable(bitstring: 
     sim_params = AnalogSimParams([observable], elapsed_time=0.1, dt=0.1)
 
     with pytest.raises(TypeError, match="Bitstring observables must define a string bitstring"):
-        _product_state_mps(2).evaluate_observables(
+        _product_state_mps(2)._evaluate_observables(
             sim_params,
             np.empty((1, 1), dtype=np.float64),
             column_index=0,
@@ -3321,10 +3322,10 @@ def test_evaluate_observables_rejects_operator_without_sites() -> None:
     state = _product_state_mps(2)
     observable = Observable("z", 0)
     observable.sites = None
-    sim_params = Mock(sorted_observables=[observable])
+    sim_params = Mock(_sorted_observables=[observable])
 
     with pytest.raises(ValueError, match="Operator observables must have explicit sites"):
-        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+        state._evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
 
 
 @pytest.mark.parametrize(
@@ -3347,10 +3348,10 @@ def test_evaluate_observables_rejects_invalid_operator_sites(
     state = _product_state_mps(2)
     observable = Observable("z", 0)
     observable.sites = cast("Any", sites)
-    sim_params = Mock(sorted_observables=[observable])
+    sim_params = Mock(_sorted_observables=[observable])
 
     with pytest.raises(error, match=match):
-        state.evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
+        state._evaluate_observables(sim_params, np.empty((1, 1)), column_index=0)
 
 
 @pytest.mark.parametrize("show_progress", [False, True])

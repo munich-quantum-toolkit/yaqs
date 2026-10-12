@@ -12,6 +12,5 @@ Uses numerical forward models and gradient-free optimization through
 """
 
 from .results import NoiseCharacterizationResult
-from .run import run_optimization_characterization
 
-__all__ = ["NoiseCharacterizationResult", "run_optimization_characterization"]
+__all__ = ["NoiseCharacterizationResult"]

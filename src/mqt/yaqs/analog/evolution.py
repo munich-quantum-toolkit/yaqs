@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..core.data_structures.simulation_parameters import EvolutionMode
 from ..core.methods.bug import bug
 from ..core.methods.tdvp import tdvp
 
@@ -42,9 +41,9 @@ def apply_unitary_evolution(
     Raises:
         ValueError: If ``evolution_mode`` is not supported.
     """
-    if sim_params.evolution_mode == EvolutionMode.TDVP:
+    if sim_params.evolution_mode == "tdvp":
         tdvp(state, hamiltonian, sim_params)
-    elif sim_params.evolution_mode == EvolutionMode.BUG:
+    elif sim_params.evolution_mode == "bug":
         if state.orthogonality_center is None:
             state.set_canonical_form(0, decomposition="QR")
         elif state.orthogonality_center != 0:

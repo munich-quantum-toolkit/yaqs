@@ -9,3 +9,9 @@
 
 :class:`~mqt.yaqs.MemoryCharacterizer` provides the high-level interface.
 """
+
+from .backends.tomography import DenseProcessTensor, MPOProcessTensor
+from .operational_memory.results import CharacterizationResult
+from .operational_memory.samples import ProbeSet
+
+__all__ = ["CharacterizationResult", "DenseProcessTensor", "MPOProcessTensor", "ProbeSet"]

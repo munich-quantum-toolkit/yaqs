@@ -8,7 +8,7 @@
 """Tests for the :class:`~mqt.yaqs.core.data_structures.result.Result` container.
 
 These tests verify that ``Result`` holds simulation outputs separately from the
-read-only ``*SimParams`` configuration object and can be pickled.
+``*SimParams`` configuration object and can be pickled.
 """
 
 # ignore non-lowercase variable names for physics notation
@@ -29,12 +29,42 @@ from mqt.yaqs import (
     NoiseModel,
     Observable,
     Result,
+    SimulationProgram,
     Simulator,
     State,
 )
-from mqt.yaqs.core.data_structures.result import aggregate_counts
-from mqt.yaqs.core.data_structures.simulation_program import stitch_program_results
+from mqt.yaqs.core.data_structures.result import (
+    _aggregate_counts,  # ruff: ignore[import-private-name] - Exercise count aggregation directly.
+)
+from mqt.yaqs.core.data_structures.simulation_program import (
+    _stitch_program_results,  # ruff: ignore[import-private-name] - Exercise program result assembly directly.
+)
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+
+
+@pytest.mark.parametrize("program", [False, True])
+def test_result_preserves_requested_observable_order(*, program: bool) -> None:
+    """Analog and program results retain user order when internal evaluation sorts by site."""
+    first = np.array([np.cos(0.3), np.sin(0.3)])
+    second = np.array([np.cos(0.6), np.sin(0.6)])
+    state = State(tensors=[first.reshape(2, 1, 1), second.reshape(2, 1, 1)])
+    requested = [Observable("z", 1), Observable("x", 0), Observable("z", 0)]
+    params = AnalogSimParams(
+        observables=[] if program else requested,
+        elapsed_time=0.1,
+        dt=0.1,
+        num_traj=1,
+    )
+    hamiltonian = Hamiltonian.ising(2, J=0.0, g=0.0)
+    operator = SimulationProgram([(hamiltonian, params)], observables=requested) if program else hamiltonian
+
+    result = Simulator(parallel=False, show_progress=False).run(state, operator, None if program else params)
+
+    assert [(observable.name, observable.sites) for observable in result.observables] == [
+        (observable.name, observable.sites) for observable in requested
+    ]
+    for actual, expected in zip(result.expectation_values, [np.cos(1.2), np.sin(0.6), np.cos(0.6)], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
 def test_result_holds_outputs_for_analog_run() -> None:
@@ -213,7 +243,7 @@ def test_stitch_program_results_combines_analog_and_digital_samples() -> None:
         ),
     ]
 
-    expectation_values, times, counts = stitch_program_results(segment_results, [observable])
+    expectation_values, times, counts = _stitch_program_results(segment_results, [observable])
 
     assert counts is None
     assert times is not None
@@ -243,7 +273,7 @@ def test_stitch_program_results_shifts_adjacent_analog_grids() -> None:
         ),
     ]
 
-    expectation_values, times, _ = stitch_program_results(segment_results, [observable])
+    expectation_values, times, _ = _stitch_program_results(segment_results, [observable])
 
     assert times is not None
     np.testing.assert_allclose(times, np.array([0.0, 0.1, 0.3]))
@@ -257,7 +287,7 @@ def test_stitch_program_results_keeps_final_segment_counts() -> None:
         Result(counts={1: 3}, segment_index=1, segment_type="digital", time_offset=0.0),
     ]
 
-    expectation_values, times, counts = stitch_program_results(segment_results, [])
+    expectation_values, times, counts = _stitch_program_results(segment_results, [])
 
     assert expectation_values == []
     assert times is None
@@ -286,7 +316,7 @@ def test_stitch_program_results_rejects_mismatched_observable_counts() -> None:
     ]
 
     with pytest.raises(ValueError, match="recorded 0 observables, expected 1"):
-        stitch_program_results(segment_results, [observable])
+        _stitch_program_results(segment_results, [observable])
 
 
 def test_stitch_program_results_rejects_analog_segment_without_times() -> None:
@@ -303,7 +333,7 @@ def test_stitch_program_results_rejects_analog_segment_without_times() -> None:
     ]
 
     with pytest.raises(ValueError, match="has no time data"):
-        stitch_program_results(segment_results, [observable])
+        _stitch_program_results(segment_results, [observable])
 
 
 def test_stitch_program_results_rejects_misaligned_analog_times() -> None:
@@ -321,7 +351,7 @@ def test_stitch_program_results_rejects_misaligned_analog_times() -> None:
     ]
 
     with pytest.raises(ValueError, match="is not aligned with times"):
-        stitch_program_results(segment_results, [observable])
+        _stitch_program_results(segment_results, [observable])
 
 
 def test_stitch_program_results_rejects_inconsistent_observable_shapes() -> None:
@@ -339,11 +369,11 @@ def test_stitch_program_results_rejects_inconsistent_observable_shapes() -> None
     ]
 
     with pytest.raises(ValueError, match="has inconsistent shape"):
-        stitch_program_results(segment_results, observables)
+        _stitch_program_results(segment_results, observables)
 
 
 def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
-    """aggregate_counts must sum every non-None measurement, even after a None entry.
+    """_aggregate_counts must sum every non-None measurement, even after a None entry.
 
     Regression: previously, the presence of any None short-circuited the aggregator
     to ``result.measurements[0]`` alone, silently dropping later valid per-shot dicts.
@@ -352,7 +382,7 @@ def test_aggregate_counts_skips_none_entries_and_sums_remainder() -> None:
     result = Result(sim_params=shot_params)
     result.measurements = [{0: 2, 1: 1}, None, {1: 3, 2: 4}]
 
-    aggregate_counts(result)
+    _aggregate_counts(result)
 
     assert result.counts == {0: 2, 1: 4, 2: 4}
 
@@ -363,6 +393,6 @@ def test_aggregate_counts_handles_all_none() -> None:
     result = Result(sim_params=shot_params)
     result.measurements = [None, None, None]
 
-    aggregate_counts(result)
+    _aggregate_counts(result)
 
     assert result.counts == {}

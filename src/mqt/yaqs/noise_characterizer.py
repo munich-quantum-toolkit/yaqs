@@ -153,8 +153,15 @@ class NoiseCharacterizer:
             x_up: Upper parameter bounds.
             reference_model: Noise model used to generate reference trajectories.
             ref_expectations: Measured trajectories with shape ``(n_obs, n_times)``.
-            **optimizer_kwargs: Settings for :func:`~mqt.yaqs.characterization.noise.backends.cma.cma_opt`,
-                which defines the optimization budget and seed.
+            **optimizer_kwargs: ``max_iter`` (positive integer, default 500) limits
+                CMA-ES generations. ``popsize`` (integer >= 2, default 4) sets candidates
+                per generation; ``sigma0`` (positive float, default 0.01) sets the
+                initial search scale. ``seed`` (non-negative integer or ``None``)
+                seeds CMA-ES, separately from trajectory sampling. A single parameter
+                with finite bounds uses a deterministic scalar search, where
+                ``max_iter`` limits search evaluations and the other settings have
+                no effect. Initial-model and final fitted-trajectory evaluations are
+                outside this budget. SciPy can use two evaluations when ``max_iter=1``.
 
         Returns:
             Fitted noise model, optimization diagnostics, and fitted and reference trajectories.

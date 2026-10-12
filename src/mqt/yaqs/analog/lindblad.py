@@ -22,6 +22,8 @@ adaptive RK45 on the same RHS. Suitable for ``N <= 10``; use ``representation='m
 or ``'vector'`` for larger lattices.
 """
 
+# Observable evaluation uses the private worker ordering.
+
 from __future__ import annotations
 
 import math
@@ -145,7 +147,7 @@ def preprocess_lindblad(
             l_dag_l_sum += op_csr.conj().T @ op_csr
 
     embedded_observables: list[scipy.sparse.spmatrix | NDArray[np.complex128] | None] = []
-    for obs in sim_params.sorted_observables:
+    for obs in sim_params._sorted_observables:  # ruff: ignore[private-member-access]
         if obs.type == "diagnostic":
             embedded_observables.append(None)
         else:
@@ -321,7 +323,7 @@ def _evolve_with_propagator(ctx: LindbladContext) -> NDArray[np.float64]:
     dim = ctx.dim
     assert ctx.step_propagator is not None
 
-    num_obs = len(sim_params.sorted_observables)
+    num_obs = len(sim_params._sorted_observables)  # ruff: ignore[private-member-access]
     num_steps = len(sim_params.times)
     num_cols = num_steps if sim_params.sample_timesteps else 1
     obs_results = np.zeros((num_obs, num_cols), dtype=np.float64)
@@ -386,7 +388,7 @@ def _evolve_with_ode(ctx: LindbladContext) -> NDArray[np.float64]:
         raise RuntimeError(msg)
 
     # result.y has shape (dim^2, num_time_points).
-    num_obs = len(sim_params.sorted_observables)
+    num_obs = len(sim_params._sorted_observables)  # ruff: ignore[private-member-access]
     if sim_params.sample_timesteps:
         obs_results = np.zeros((num_obs, len(result.t)), dtype=np.float64)
         for t_idx, rho_flat_t in enumerate(result.y.T):

@@ -10,7 +10,7 @@
 This module contains unit tests for simulation parameter classes. It verifies that:
   - AnalogSimParams instances are created with the correct attributes (such as elapsed_time, dt, times,
     sample_timesteps, and num_traj) both with explicit and default values.
-  - allocate_observable_buffers properly sets up expectation_values and trajectories arrays
+  - _allocate_observable_buffers properly sets up expectation_values and trajectories arrays
     depending on whether sample_timesteps is True or False.
 """
 
@@ -19,18 +19,16 @@ This module contains unit tests for simulation parameter classes. It verifies th
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pytest
 
 from mqt.yaqs.core.data_structures.observable import Observable
-from mqt.yaqs.core.data_structures.result import Result, aggregate_trajectories, allocate_observable_buffers
+from mqt.yaqs.core.data_structures.result import Result, _aggregate_trajectories, _allocate_observable_buffers
 from mqt.yaqs.core.data_structures.simulation_parameters import (
-    SIMULATION_PRESETS,
     AnalogSimParams,
     DigitalSimParams,
-    EvolutionMode,
     _validate_analog_time_grid,
     _validate_tdvp_sweeps,
 )
@@ -44,6 +42,14 @@ if TYPE_CHECKING:
         SimulationPreset,
         TDVPMode,
     )
+
+
+EXPECTED_PRESETS: dict[SimulationPreset, dict[str, float | int | None]] = {
+    "fast": {"svd_threshold": 1e-3, "max_bond_dim": 16, "num_traj": 128, "krylov_tol": 1e-3},
+    "balanced": {"svd_threshold": 1e-6, "max_bond_dim": 128, "num_traj": 256, "krylov_tol": 1e-4},
+    "accurate": {"svd_threshold": 1e-9, "max_bond_dim": 4096, "num_traj": 1024, "krylov_tol": 1e-6},
+    "exact": {"svd_threshold": 1e-13, "max_bond_dim": None, "num_traj": 1024, "krylov_tol": 1e-12},
+}
 
 
 def test_analog_simparams_basic() -> None:
@@ -162,7 +168,7 @@ def test_analog_simparams_defaults() -> None:
     assert params.sample_timesteps is True
     # times should be 0..elapsed_time inclusive with spacing dt
     assert np.isclose(params.times[-1], 0.1)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.num_traj == balanced["num_traj"]
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -173,12 +179,7 @@ def test_analog_simparams_defaults() -> None:
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """AnalogSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
@@ -192,12 +193,7 @@ def test_analog_simparams_presets(preset: SimulationPreset, expected: dict[str, 
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_digital_simparams_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """DigitalSimParams resolves svd_threshold, max_bond_dim, num_traj, and krylov_tol from presets."""
@@ -212,7 +208,7 @@ def test_digital_simparams_presets(preset: SimulationPreset, expected: dict[str,
 def test_analog_simparams_default_constructor_uses_balanced() -> None:
     """AnalogSimParams() uses the balanced preset by default."""
     params = AnalogSimParams()
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -223,7 +219,7 @@ def test_analog_simparams_default_constructor_uses_balanced() -> None:
 def test_digital_simparams_shots_default_uses_balanced() -> None:
     """DigitalSimParams(shots=...) uses the balanced preset by default."""
     params = DigitalSimParams(shots=100)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -401,12 +397,7 @@ def test_analog_order_rejects_unsupported_values(invalid: int) -> None:
 
 @pytest.mark.parametrize(
     ("preset", "expected"),
-    [
-        ("fast", SIMULATION_PRESETS["fast"]),
-        ("balanced", SIMULATION_PRESETS["balanced"]),
-        ("accurate", SIMULATION_PRESETS["accurate"]),
-        ("exact", SIMULATION_PRESETS["exact"]),
-    ],
+    list(EXPECTED_PRESETS.items()),
 )
 def test_digital_simparams_shots_presets(preset: SimulationPreset, expected: dict[str, float | int | None]) -> None:
     """DigitalSimParams resolves svd_threshold, max_bond_dim, and krylov_tol from the shared presets."""
@@ -430,7 +421,7 @@ def test_analog_simparams_preset_explicit_overrides() -> None:
 def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
     """Explicit ``krylov_tol`` overrides the preset without affecting other preset fields."""
     params = AnalogSimParams(preset="balanced", krylov_tol=1e-8)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
     assert params.max_bond_dim == balanced["max_bond_dim"]
@@ -441,7 +432,7 @@ def test_analog_simparams_krylov_tol_overrides_preset_only() -> None:
 def test_analog_simparams_max_bond_dim_none_overrides_preset() -> None:
     """Explicit ``max_bond_dim=None`` removes the bond cap without changing other preset fields."""
     params = AnalogSimParams(preset="balanced", max_bond_dim=None)
-    balanced = SIMULATION_PRESETS["balanced"]
+    balanced = EXPECTED_PRESETS["balanced"]
     assert params.preset == "balanced"
     assert params.max_bond_dim is None
     assert params.svd_threshold == pytest.approx(balanced["svd_threshold"])
@@ -512,14 +503,22 @@ def test_simparams_allows_zero_svd_threshold() -> None:
     assert params.svd_threshold == pytest.approx(0.0)
 
 
-def test_evolution_mode_validation() -> None:
-    """AnalogSimParams accepts BUG and rejects unknown evolution modes."""
-    params = AnalogSimParams(evolution_mode=EvolutionMode.BUG)
-    assert params.evolution_mode is EvolutionMode.BUG
-    assert AnalogSimParams(evolution_mode="bug").evolution_mode is EvolutionMode.BUG
+def test_evolution_mode_defaults_to_tdvp() -> None:
+    """Analog evolution uses TDVP unless another integrator is selected."""
+    assert AnalogSimParams().evolution_mode == "tdvp"
 
+
+@pytest.mark.parametrize("evolution_mode", ["tdvp", "bug"])
+def test_evolution_mode_accepts_supported_strings(evolution_mode: Literal["tdvp", "bug"]) -> None:
+    """Analog parameters retain the requested integrator name."""
+    assert AnalogSimParams(evolution_mode=evolution_mode).evolution_mode == evolution_mode
+
+
+@pytest.mark.parametrize("invalid", ["not-a-mode", None, True, ["tdvp"]])
+def test_evolution_mode_rejects_unsupported_values(invalid: object) -> None:
+    """Unknown names and non-string values raise a clear ValueError."""
     with pytest.raises(ValueError, match="evolution_mode"):
-        _ = AnalogSimParams(evolution_mode="not-a-mode")
+        AnalogSimParams(evolution_mode=cast("Any", invalid))
 
 
 @pytest.mark.parametrize(
@@ -572,7 +571,7 @@ def test_krylov_tol_propagates_to_expm_krylov(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_allocate_observable_buffers_with_sample_timesteps() -> None:
-    """allocate_observable_buffers shapes buffers when sample_timesteps is True."""
+    """_allocate_observable_buffers shapes buffers when sample_timesteps is True."""
     sim_params = AnalogSimParams(
         observables=[Observable("x", 1)],
         elapsed_time=1.0,
@@ -580,7 +579,7 @@ def test_allocate_observable_buffers_with_sample_timesteps() -> None:
         num_traj=10,
         sample_timesteps=True,
     )
-    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=10)
+    trajectories, expectation_values, times = _allocate_observable_buffers(sim_params, 1, num_traj=10)
 
     assert times is sim_params.times
     assert expectation_values[0].shape == (3,)
@@ -588,7 +587,7 @@ def test_allocate_observable_buffers_with_sample_timesteps() -> None:
 
 
 def test_allocate_observable_buffers_without_sample_timesteps() -> None:
-    """allocate_observable_buffers uses a single time column when sample_timesteps is False."""
+    """_allocate_observable_buffers uses a single time column when sample_timesteps is False."""
     sim_params = AnalogSimParams(
         observables=[Observable("x", 0)],
         elapsed_time=1.0,
@@ -596,7 +595,7 @@ def test_allocate_observable_buffers_without_sample_timesteps() -> None:
         num_traj=5,
         sample_timesteps=False,
     )
-    trajectories, expectation_values, times = allocate_observable_buffers(sim_params, 1, num_traj=5)
+    trajectories, expectation_values, times = _allocate_observable_buffers(sim_params, 1, num_traj=5)
 
     assert times is not None
     assert times.shape == (1,)
@@ -621,7 +620,7 @@ def test_aggregate_trajectories_regular_observable_mean() -> None:
     sim = AnalogSimParams(observables=[z_obs], elapsed_time=0.2, dt=0.1, num_traj=2)
     run_result = Result(sim_params=sim, observables=[z_obs], trajectories=[traj], expectation_values=[np.empty(1)])
 
-    aggregate_trajectories(run_result)
+    _aggregate_trajectories(run_result)
 
     expected = traj.mean(axis=0)
     np.testing.assert_allclose(run_result.expectation_values[0], expected)
@@ -643,23 +642,23 @@ def test_digital_params_sorting_and_fields() -> None:
         num_mid_measurements=2,
     )
 
-    assert params.sorted_observables[0] is obs_y1
-    assert params.sorted_observables[1] is obs_ssp
-    assert params.sorted_observables[2] is obs_x2
-    assert params.sorted_observables[3] is obs_z3
+    assert params._sorted_observables[0] is obs_y1
+    assert params._sorted_observables[1] is obs_ssp
+    assert params._sorted_observables[2] is obs_x2
+    assert params._sorted_observables[3] is obs_z3
 
     # Mapping from user order -> sorted worker row indices
-    assert params.observable_sorted_indices == (3, 2, 0, 1)
+    assert params._observable_sorted_indices == (3, 2, 0, 1)
 
     # Ordering is derived from the current observables list, not cached at construction.
     params.observables.append(Observable("z", sites=0))
-    assert len(params.sorted_observables) == 5
-    assert params.observable_sorted_indices == (4, 3, 1, 2, 0)
+    assert len(params._sorted_observables) == 5
+    assert params._observable_sorted_indices == (4, 3, 1, 2, 0)
 
     # Parameter fields are retained
     assert params.num_traj == 7
     assert params.max_bond_dim == 128
-    assert params.svd_threshold == pytest.approx(SIMULATION_PRESETS["balanced"]["svd_threshold"])
+    assert params.svd_threshold == pytest.approx(EXPECTED_PRESETS["balanced"]["svd_threshold"])
     assert params.get_state is True
     assert params.sample_layers is True
     assert params.num_mid_measurements == 2
@@ -732,7 +731,7 @@ def test_digital_aggregate_regular_mean() -> None:
     )
     params = DigitalSimParams(observables=[x], num_traj=3)
     run_result = Result(sim_params=params, observables=[x], trajectories=[traj], expectation_values=[np.empty(3)])
-    aggregate_trajectories(run_result)
+    _aggregate_trajectories(run_result)
 
     np.testing.assert_allclose(run_result.expectation_values[0], traj.mean(axis=0))
 
