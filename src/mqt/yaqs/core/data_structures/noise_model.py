@@ -282,6 +282,11 @@ class NoiseModel:
                 formed as ``sqrt(gamma) * L`` during simulation. Fixed strengths
                 must be finite and nonnegative. For equivalence checking, resolved
                 strengths are instead direct branch probabilities.
+                Distribution-valued strengths use
+                ``{"distribution": kind, "mean": value, "std": value}``, where
+                ``kind`` is ``"normal"``, ``"lognormal"``, or ``"truncated_normal"``.
+                For lognormal strengths, ``mean`` and ``std`` describe the underlying
+                normal distribution. See :meth:`sample` for draw handling.
             scheduled_jumps: A list of scheduled jumps to apply at specific times.
                 Each dict must contain ``time``, ``sites``, and ``name``. An
                 optional ``matrix`` overrides the library lookup. Two-site

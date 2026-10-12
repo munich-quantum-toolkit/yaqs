@@ -129,50 +129,14 @@ def _prepare_mpo_tensors(
 
 
 class MPO:
-    """Matrix Product Operator (MPO) for YAQS tensor-network simulations.
+    """Represent a lattice operator as a chain of local tensors.
 
-    An MPO represents a linear operator on a 1D lattice as a chain of local tensors.
-    YAQS stores each site tensor with index order::
+    Each tensor has axes ``(physical_out, physical_in, bond_left, bond_right)``.
+    Dense conversions use site zero as the least-significant subsystem, matching
+    :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
 
-        (phys_out, phys_in, chi_left, chi_right)
-
-    where ``phys_out``/``phys_in`` are the physical operator legs and
-    ``chi_left``/``chi_right`` are the virtual (bond) dimensions.
-
-    **Construction**
-
-    Use classmethod factories to build common Hamiltonians or custom operators:
-
-    - ``MPO.ising(...)`` / ``MPO.heisenberg(...)``: qubit Pauli Hamiltonians.
-    - ``MPO.pauli(...)``: generic one-/two-body Pauli interactions.
-    - ``MPO.fermi_hubbard_1d(...)``: 1D Fermi-Hubbard (fermionic or Jordan-Wigner Pauli).
-    - ``MPO.trapped_ion(...)``: one or two trapped ions on a position grid.
-    - ``MPO.coupled_transmon(...)``: alternating qubit/resonator chain MPO.
-    - ``from_pauli_sum(...)``: in-place build from a sum of Pauli-string terms.
-    - ``MPO.identity(...)``: identity operator.
-    - ``custom(...)``, ``finite_state_machine(...)``: in-place builders.
-
-    **Operations**
-
-    - ``from_gate(...)``: build an MPO from a two-qubit gate on a chain (optionally identity-padded).
-    - ``multiply(MPS)`` / ``multiply(MPO)``: apply this MPO to an MPS or left-multiply into another MPO.
-    - ``compress(...)``: SVD-based bond compression sweeps.
-    - ``rotate(...)``: swap physical legs (optionally conjugating).
-
-    **Conversion / checks**
-
-    - ``to_mps()`` / ``to_matrix()``: convert to an MPS or dense matrix. Dense
-      matrices use site ``0`` as the least-significant subsystem, matching
-      :meth:`~mqt.yaqs.core.data_structures.mps.MPS.to_vec`.
-    - ``compute_schmidt_spectrum()`` / ``compute_entanglement_entropy()``: operator bond diagnostics.
-    - ``compute_identity_fidelity()``: normalized overlap with the identity.
-    - ``check_if_valid_mpo()``: structural bond-dimension consistency check.
-    - ``check_if_identity(...)``: heuristic identity check (qubit systems).
-
-    **Notes**
-
-    Some constructors (e.g. Pauli-string builders) currently require
-    ``physical_dimension == 2``.
+    Factories build common Hamiltonians and gates on two or more qubits.
+    :meth:`custom` accepts tensor data; Pauli builders require local dimension two.
     """
 
     _PAULI_2: ClassVar[dict[str, np.ndarray]] = {
@@ -1146,28 +1110,22 @@ class MPO:
         *,
         physical_dimensions: list[int] | tuple[int, ...] | None = None,
     ) -> MPO:
-        """Build an MPO for a gate on two or more qubits on a chain.
+        """Build an MPO for a gate on two or more qubits.
 
-        When ``chain_length`` equals the gate support size, the MPO contains only the
-        extended gate tensors. When ``chain_length`` is larger, identity MPO sites are
-        placed outside the support interval ``[min(sites), max(sites)]``.
-
-        Reuses :attr:`~mqt.yaqs.core.libraries.gate_library.BaseGate.mpo_tensors` when
-        already populated for the gate support.
+        A support window spans ``min(sites)`` through ``max(sites)``, including
+        spectators. A full-chain MPO adds identity tensors outside that window.
 
         Args:
-            gate: Gate on two or more qubits with ``sites`` and ``tensor`` (or ``mpo_tensors``) set.
-            chain_length: Total number of MPO sites (support length or full MPS length).
-            physical_dimensions: Optional local dimension for every chain site.
-                This permits qubit gates whose support crosses non-qubit spectators.
+            gate: Gate with sites and either its tensor or MPO tensors set.
+            chain_length: Number of sites in the support window or full chain.
+            physical_dimensions: Optional local dimensions for all chain sites,
+                including non-qubit spectators.
 
         Returns:
-            MPO ready for :meth:`multiply` on an MPS or another MPO.
+            Gate MPO for :meth:`multiply`.
 
         Raises:
-            ValueError: If the gate acts on fewer than two qubits, the number of sites does not
-                match the interaction level, ``chain_length`` is too small, or the sites lie
-                outside the chain.
+            ValueError: If gate support or chain length is invalid, or fewer than two qubits are given.
         """
         if gate.interaction < 2:
             msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."

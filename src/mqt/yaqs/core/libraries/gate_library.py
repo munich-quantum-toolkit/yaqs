@@ -931,8 +931,7 @@ class Rx(BaseGate):
         """Initializes the rotation gate about the x-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -963,8 +962,7 @@ class Ry(BaseGate):
         """Initializes the rotation gate about the y-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -995,8 +993,7 @@ class Rz(BaseGate):
         """Initializes the rotation gate about the z-axis.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1027,8 +1024,7 @@ class Phase(BaseGate):
         """Initializes the phase gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([[1, 0], [0, np.exp(1j * self.theta)]])
@@ -1094,8 +1090,7 @@ class U(BaseGate):
         """Initializes the U3 gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a three rotation angle (theta, phi, lambda) parameters.
+            params: Rotation angles ``[theta, phi, lambda]`` in radians.
         """
         self.theta, self.phi, self.lam = params
         mat = np.array([
@@ -1327,8 +1322,7 @@ class CPhase(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, np.exp(1j * self.theta)]])
@@ -1470,8 +1464,7 @@ class Rxx(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1532,8 +1525,7 @@ class Ryy(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([
@@ -1594,8 +1586,7 @@ class Rzz(BaseGate):
         """Initializes the gate.
 
         Args:
-            params : list[Parameter]
-            A list containing a single rotation angle (`theta`) parameter.
+            params: Rotation angle ``[theta]`` in radians.
         """
         self.theta = params[0]
         mat = np.array([

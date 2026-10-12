@@ -90,40 +90,25 @@ class MPS:
         pad: int | None = None,
         basis_string: str | None = None,
     ) -> None:
-        """Initializes a Matrix Product State (MPS).
+        """Build an MPS from tensors or an initial-state preset.
 
         Args:
-            length: Number of sites (qubits) in the MPS.
-            tensors: Predefined open-boundary MPS tensors in ``(physical, left, right)``
-                order. The tensors must be finite rank-3 arrays with compatible bonds,
-                unit exterior bonds, and physical axes that match ``physical_dimensions``.
-                If None, tensors are initialized according to `state`.
-            physical_dimensions: Physical dimension for each site. Defaults to qubit systems (dimension 2) if None.
-            state: Initial state configuration. Valid options include:
-                - "zeros": Initializes all qubits to |0⟩.
-                - "ones": Initializes all qubits to |1⟩.
-                - "x+": Initializes each qubit to (|0⟩ + |1⟩)/√2.
-                - "x-": Initializes each qubit to (|0⟩ - |1⟩)/√2.
-                - "y+": Initializes each qubit to (|0⟩ + i|1⟩)/√2.
-                - "y-": Initializes each qubit to (|0⟩ - i|1⟩)/√2.
-                - "Neel": Alternating pattern |0101...⟩.
-                - "wall": Domain wall at given site |000111>
-                - "random": Initializes each qubit randomly.
-                - "haar-random": Initializes an entangled MPS via Haar-random isometries.
-                - "basis": Initializes a qubit in an input computational basis.
-                Default is "zeros".
-            pad: Pads the state with extra zeros to increase bond dimension. Can increase numerical stability.
-                For ``state="haar-random"``, this value is interpreted as the target maximum internal
-                bond dimension χ_max. If omitted, χ_max defaults to 1.
-            basis_string: String used to initialize the state in a specific computational basis.
-                This should generally be in the form of 0s and 1s, e.g., "0101" for a 4-qubit state.
-                For mixed-dimensional systems, this can be increased to 2, 3, ... etc.
-                Character ``i`` selects site ``i``.
+            length: Positive number of sites.
+            tensors: Finite open-boundary tensors with axes ``(physical, left, right)``,
+                compatible bonds, and unit exterior bonds. Omit to use ``state``.
+            physical_dimensions: Local dimension or list of dimensions; defaults to two per site.
+            state: Product-state preset: ``"zeros"``, ``"ones"``, ``"x+"``, ``"x-"``,
+                ``"y+"``, ``"y-"``, ``"Neel"`` (alternating), ``"wall"`` (domain wall),
+                ``"random"``, or ``"basis"``. ``"haar-random"`` uses Haar-random isometries
+                and can produce entangled states.
+            pad: Bond dimension after zero padding. For ``"haar-random"``, the target
+                maximum internal bond dimension, defaulting to one.
+            basis_string: Local basis indices for ``"basis"``; character ``i`` selects
+                site ``i``, including levels above one for non-qubit sites.
 
         Raises:
             TypeError: If ``length`` has an unsupported type.
-            ValueError: If ``length`` is not positive, tensor data are structurally invalid,
-                physical dimensions do not match, or the requested state configuration is invalid.
+            ValueError: If length, tensor structure, local dimensions, or the preset is invalid.
         """
         if not isinstance(length, Integral) or isinstance(length, bool):
             msg = "length must be an integer."
@@ -780,27 +765,19 @@ class MPS:
         return global_max
 
     def get_total_bond(self) -> int:
-        """Compute total bond dimension.
-
-        Calculates the sum of all internal bond dimensions of the network.
-        Specifically, this sums the second index (left bond dimension)
-        of each tensor except for the first tensor.
+        """Sum the internal bond dimensions.
 
         Returns:
-            int: The total bond dimension across all internal bonds.
+            Sum of left-bond dimensions, excluding the first tensor's exterior bond.
         """
         bonds = [tensor.shape[1] for tensor in self.tensors[1:]]
         return sum(bonds)
 
     def get_cost(self) -> int:
-        """Estimate contraction cost.
-
-        Approximates the computational cost of simulating the network
-        by summing the cube of each internal bond dimension. This is a
-        heuristic metric for the cost of tensor contractions.
+        """Estimate contraction cost from the internal bonds.
 
         Returns:
-            int: The estimated contraction cost of the network.
+            Sum of cubed internal bond dimensions, a contraction-cost heuristic.
         """
         cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
         return sum(cost)
@@ -1122,12 +1099,9 @@ class MPS:
         return scaled_tensor, scale, float(np.linalg.norm(scaled_tensor))
 
     def normalize_center(self) -> None:
-        """Normalize the MPS by rescaling its tracked center tensor.
+        """Normalize in place by rescaling only the tracked center tensor.
 
-        This operation does not move or establish the orthogonality center. It trusts
-        the tracked mixed-canonical gauge and therefore touches only the center tensor.
-        A stable direct norm handles ordinary tensors; scaled arithmetic handles norms
-        larger than the floating-point range.
+        Requires a known mixed-canonical gauge; does not establish or move the center.
 
         Raises:
             ValueError: If the center is unknown or its norm is zero or non-finite.
@@ -1153,24 +1127,15 @@ class MPS:
         self.tensors[center] = scaled_tensor
 
     def normalize(self, form: str = "B", decomposition: str = "QR") -> None:
-        """Normalize MPS.
-
-        Normalize the network to a specified form.
-        This method normalizes the network to the specified form. By default, it normalizes
-        to form "B" (right canonical).
-        The normalization process involves flipping the network, setting the canonical form with the
-        orthogonality center at the last position, and shifting the orthogonality center to the rightmost position.
-
-        NOTE: Slow method compared to shifting based on known form and should be avoided.
+        """Establish a canonical gauge and normalize the state in place.
 
         Args:
-            form (str): The form to normalize the network to. Default is "B".
-            decomposition: Decides between QR or SVD decomposition. QR is faster, SVD allows bond dimension to reduce
-                           Default is QR.
+            form: ``"B"`` gives right-canonical form with center at site zero;
+                other values give left-canonical form with center at the last site.
+            decomposition: ``"QR"`` or ``"SVD"``; SVD can reduce bond dimensions.
 
         Raises:
-            ValueError: If the decomposition is invalid or the state norm is zero or non-finite.
-
+            ValueError: If the decomposition is invalid or the norm is zero or non-finite.
         """
         self._validate_decomposition(decomposition)
         msg = "Cannot normalize MPS: norm is zero or non-finite."
@@ -1195,28 +1160,19 @@ class MPS:
         trunc_mode: TruncMode = "discarded_weight",
         _restore_center: int | None = None,
     ) -> None:
-        """Compress in place by right-canonicalizing, then truncating left-to-right.
+        """Compress bonds in place without renormalizing the state.
 
-        Truncating while establishing a mixed gauge from a non-canonical product
-        state (e.g. after uncapped MPO-MPS multiplication) is not equivalent to the optimal
-        sequential SVD of the state and can leave large, θ-independent residuals.
-        The procedure here is:
-
-        1. Restore a right-canonical gauge with QR (no bond-dimension cap).
-        2. Sweep left-to-right with truncated SVD at each bond.
-        3. Restore the original orthogonality center without further truncation, or
-           use the private target supplied by an internal caller.
+        Establishes right-canonical form before a left-to-right truncated SVD sweep.
+        Restores the tracked center without further truncation. If the center was
+        unknown, uses a detected canonical center or the middle site.
 
         Args:
-            threshold: SVD truncation threshold (e.g. ``sim_params.svd_threshold``).
-            max_bond_dim: Optional cap on bond dimension.
-            trunc_mode: Truncation mode forwarded to the two-site SVD split
-                (``"discarded_weight"``, ``"relative"``, ``"hard_cutoff"``, or
-                ``"relative_discarded_weight"``).
-            _restore_center: Internal final-center target. This lets a caller keep
-                gauge metadata unknown after tensor mutation while selecting the
-                center left by compression.
-
+            threshold: SVD truncation threshold.
+            max_bond_dim: Positive bond cap, or ``None`` for no cap.
+            trunc_mode: ``"discarded_weight"``, ``"relative"``, ``"hard_cutoff"``,
+                or ``"relative_discarded_weight"``; see
+                :func:`~mqt.yaqs.core.linalg.truncate` for definitions.
+            _restore_center: Internal override for the final center site.
         """
         if _restore_center is not None:
             _restore_center = self._validate_center(_restore_center, name="_restore_center")
