@@ -5,10 +5,7 @@
 #
 # Licensed under the MIT License
 
-"""Tests for :mod:`mqt.yaqs.digital.digital_tjm`.
-
-Test sections follow the public API order in ``digital_tjm.py``.
-"""
+"""Tests for :mod:`mqt.yaqs.digital.digital_tjm`."""
 
 from __future__ import annotations
 
@@ -1961,8 +1958,9 @@ def test_digital_tjm_shots_smoke_via_simulator() -> None:
     assert sum(result.counts.values()) == sim_params.shots
 
 
-def test_digital_tjm_observables_and_shots_via_simulator() -> None:
-    """Combined observables and shots via ``Simulator`` fill expectations and counts."""
+@pytest.mark.parametrize(("shots", "num_traj", "noise_strength"), [(16, 1, 0.0), (2, 4, 0.01)])
+def test_digital_tjm_observables_and_shots_via_simulator(shots: int, num_traj: int, noise_strength: float) -> None:
+    """Combined runs preserve the shot budget, including zero-shot trajectory shares."""
     length = 4
     state = State(length, initial="random")
 
@@ -1970,9 +1968,11 @@ def test_digital_tjm_observables_and_shots_via_simulator() -> None:
     qc.cx(1, 3)
     qc.measure_all()
 
-    shots = 16
-    sim_params = DigitalSimParams(observables=[Observable("z", 0)], shots=shots)
-    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, None)
+    sim_params = DigitalSimParams(observables=[Observable("z", 0)], shots=shots, num_traj=num_traj, random_seed=7)
+    noise_model = (
+        NoiseModel([{"name": "pauli_x", "sites": [1], "strength": noise_strength}]) if noise_strength else None
+    )
+    result = Simulator(parallel=False, show_progress=False).run(state, qc, sim_params, noise_model)
 
     assert result.expectation_values[0] is not None
     assert result.expectation_values[0].shape == (1,)

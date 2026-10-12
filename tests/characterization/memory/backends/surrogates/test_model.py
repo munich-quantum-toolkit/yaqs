@@ -160,7 +160,7 @@ def test_process_tensor_surrogate_predict_final_state_batch_matches_forward_last
 
 
 def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
-    """Fit infers num_interventions from training data."""
+    """Fit returns the model and records the training sequence length."""
     torch = import_torch()
 
     k = 4
@@ -168,7 +168,8 @@ def test_process_tensor_surrogate_fit_sets_num_interventions() -> None:
     E_t = torch.zeros((2, k, 32), dtype=torch.float32)
     rho0_t = torch.zeros((2, 8), dtype=torch.float32)
     tgt_t = torch.zeros((2, k, 8), dtype=torch.float32)
-    model.fit(TensorDataset(E_t, rho0_t, tgt_t), epochs=1, batch_size=2, device=torch.device("cpu"))
+    fitted = model.fit(TensorDataset(E_t, rho0_t, tgt_t), epochs=1, batch_size=2, device=torch.device("cpu"))
+    assert fitted is model
     assert model.num_interventions == k
 
 

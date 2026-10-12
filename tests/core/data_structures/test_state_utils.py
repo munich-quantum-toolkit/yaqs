@@ -134,10 +134,12 @@ def test_normalize_vector_rejects_malformed_data(vector: np.ndarray, error: str)
 
 
 def test_normalize_vector_unit_norm() -> None:
-    """Non-zero vectors are scaled to unit norm."""
+    """Normalization returns a unit-norm copy and preserves the input vector."""
     vec = np.array([3.0, 4.0], dtype=np.complex128)
     out = normalize_vector(vec)
     assert np.isclose(np.linalg.norm(out), 1.0)
+    np.testing.assert_array_equal(vec, [3.0, 4.0])
+    assert not np.shares_memory(out, vec)
 
 
 def test_normalize_density_matrix_invalid() -> None:
@@ -164,10 +166,12 @@ def test_normalize_density_matrix_rejects_nonphysical_data(rho: np.ndarray, erro
 
 
 def test_normalize_density_matrix_renormalizes_trace() -> None:
-    """Non-unit trace density matrices are normalized."""
+    """Normalization returns a trace-one copy and preserves the input matrix."""
     rho = 2.0 * np.eye(2, dtype=np.complex128)
     out = normalize_density_matrix(rho)
     assert np.isclose(np.trace(out), 1.0)
+    np.testing.assert_array_equal(rho, 2.0 * np.eye(2))
+    assert not np.shares_memory(out, rho)
 
 
 def test_normalize_density_matrix_accepts_small_scale_and_roundoff() -> None:
