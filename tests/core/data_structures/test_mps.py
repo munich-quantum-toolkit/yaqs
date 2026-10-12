@@ -2831,17 +2831,34 @@ def test_bond_diagnostics_reject_invalid_sites(
         getattr(mps, method_name)(sites)
 
 
-def test_get_schmidt_spectrum_product_padding() -> None:
-    """get_schmidt_spectrum returns [1, nan, …] for product cut; length=500."""
-    mps = _product_state_mps(3)
-    spec = mps.get_schmidt_spectrum([0, 1])
+@pytest.mark.parametrize("entangled_blocks", [False, True], ids=["product", "bell_blocks"])
+@pytest.mark.parametrize("scale", [1.0, 2.0j, 0.0], ids=["normalized", "scaled", "zero"])
+def test_get_schmidt_spectrum_rank_one_scale_and_padding(*, entangled_blocks: bool, scale: complex) -> None:
+    """A rank-one spectrum retains the state norm without changing the source MPS.
+
+    Args:
+        entangled_blocks: Whether each side of the cut contains a Bell pair.
+        scale: Global amplitude applied outside the measured pair.
+    """
+    if entangled_blocks:
+        mps = MPS(length=4, tensors=_bell_pair_mps().tensors + _bell_pair_mps().tensors)
+    else:
+        mps = MPS(length=4, state="zeros")
+    mps.tensors[0] *= scale
+    expected = _dense_schmidt_values(mps, 1)
+    before = copy.deepcopy(mps.tensors)
+    center = mps.orthogonality_center
+
+    spec = mps.get_schmidt_spectrum([1, 2])
 
     assert isinstance(spec, np.ndarray)
     assert spec.dtype == np.float64
     assert spec.shape == (500,)
-    assert np.isclose(spec[0], 1.0, atol=1e-12)
-    # the remainder must be NaN
+    assert spec[0] == pytest.approx(expected[0], abs=1e-12)
     assert np.all(np.isnan(spec[1:]))
+    assert mps.orthogonality_center == center
+    for actual, original in zip(mps.tensors, before, strict=True):
+        np.testing.assert_array_equal(actual, original)
 
 
 def test_get_schmidt_spectrum_bell_pair_values_and_padding() -> None:

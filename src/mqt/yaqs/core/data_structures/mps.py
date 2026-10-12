@@ -846,8 +846,8 @@ class MPS:
         """Compute Schmidt spectrum.
 
         Calculates the singular values of the bipartition between two
-        adjacent sites (the Schmidt coefficients). The spectrum is padded
-        or truncated to length 500 for consistent output size.
+        adjacent sites (the Schmidt coefficients), without normalizing the state.
+        The spectrum is padded or truncated to length 500 for consistent output size.
 
         Args:
             sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
@@ -861,7 +861,7 @@ class MPS:
 
         if self.tensors[i].shape[2] == 1:
             padded = np.full(top_schmidt_vals, np.nan)
-            padded[0] = 1.0
+            padded[0] = self.norm(self.orthogonality_center)
             return padded
 
         _, s_vec, _ = linalg.svd(self._bond_matrix(i, j), full_matrices=False)
