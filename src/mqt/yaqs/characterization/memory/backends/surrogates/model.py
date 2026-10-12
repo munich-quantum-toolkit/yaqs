@@ -173,6 +173,158 @@ class ProcessTensorSurrogate(nn.Module):
             raise TypeError(msg)
         return int(in_proj.in_features) - self._d_side
 
+    def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
+        """Run a forward pass.
+
+        Args:
+            e_features: Per-step features of shape ``(B, T, d_e)``.
+            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
+
+        Returns:
+            Predicted packed reduced states of shape ``(B, T, d_rho)``.
+
+        Raises:
+            ValueError: If input shapes are inconsistent.
+        """
+        b, t, _de = e_features.shape
+        if rho0.shape != (b, self.d_rho):
+            msg = f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}."
+            raise ValueError(msg)
+        side = rho0[:, None, :].expand(b, t, self._d_side)
+        x = torch.cat([e_features, side], dim=-1)
+        pe = _sinusoidal_positional_encoding(t, self.d_model, device=x.device, dtype=x.dtype)
+        h = self.in_ln(self.in_proj(x)) + pe
+        mask = _causal_mask(t, h.device)
+        h = self.encoder(h, mask=mask)
+        return self.head(h)
+
+    def fit(
+        self,
+        train_dataset: TensorDataset,
+        *,
+        val_dataset: TensorDataset | None = None,
+        epochs: int = 100,
+        lr: float = 2e-3,
+        batch_size: int = 64,
+        grad_clip: float = 1.0,
+        prefix_loss: str = "full",
+        device: torch.device | None = None,
+    ) -> ProcessTensorSurrogate:
+        """Fit the model on sequence-record training data using MSE loss.
+
+        Args:
+            train_dataset: TensorDataset containing tensors ``(E, rho0, target)``.
+            val_dataset: Optional validation dataset with the same tensor layout.
+            epochs: Number of epochs.
+            lr: Learning rate.
+            batch_size: Batch size.
+            grad_clip: Gradient clipping norm (0 disables clipping).
+            prefix_loss: Loss horizon mode: ``"full"``, ``"random"``, or ``"all"``.
+            device: Training device. Defaults to the model's current device.
+
+        Returns:
+            Self (for chaining).
+
+        Raises:
+            ValueError: If ``prefix_loss`` is invalid.
+        """
+        if device is None:
+            device = next(self.parameters()).device
+        self.to(device)
+
+        e_train, rho0_train, target_train = train_dataset.tensors
+        self.num_interventions = int(target_train.shape[1])
+        train_ds = TensorDataset(e_train, rho0_train, target_train)
+
+        has_val = val_dataset is not None
+        if has_val:
+            e_val, rho0_val, target_val = val_dataset.tensors
+
+        opt = torch.optim.Adam(self.parameters(), lr=float(lr))
+        loss_fn = nn.MSELoss()
+        bs = min(int(batch_size), max(1, int(e_train.shape[0])))
+        loader = DataLoader(train_ds, batch_size=bs, shuffle=True)
+        k_max = int(target_train.shape[1])
+        best = float("inf")
+        best_state: dict[str, Any] | None = None
+
+        for _ep in range(int(epochs)):
+            self.train()
+            for e_cpu, rho0_cpu, tgt_cpu in loader:
+                e_batch = e_cpu.to(device)
+                rho0_b = rho0_cpu.to(device)
+                tgt_b = tgt_cpu.to(device)
+                opt.zero_grad(set_to_none=True)
+                if prefix_loss == "full" or k_max <= 1:
+                    pred = self(e_batch, rho0_b)
+                    loss = loss_fn(pred, tgt_b)
+                elif prefix_loss == "random":
+                    prefix_len = int(torch.randint(low=1, high=k_max + 1, size=(1,), device=e_batch.device).item())
+                    pred = self(e_batch[:, :prefix_len, :], rho0_b)
+                    loss = loss_fn(pred, tgt_b[:, :prefix_len, :])
+                elif prefix_loss == "all":
+                    losses = []
+                    for prefix_len in range(1, k_max + 1):
+                        pred_prefix = self(e_batch[:, :prefix_len, :], rho0_b)
+                        losses.append(loss_fn(pred_prefix, tgt_b[:, :prefix_len, :]))
+                    loss = torch.stack(losses, dim=0).mean()
+                else:
+                    msg = f"Unknown prefix_loss: {prefix_loss!r}"
+                    raise ValueError(msg)
+
+                loss.backward()
+                if grad_clip and float(grad_clip) > 0:
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), float(grad_clip))
+                opt.step()
+
+            if has_val:
+                self.eval()
+                with torch.no_grad():
+                    pred_va = self(e_val.to(device), rho0_val.to(device))
+                    val = float(loss_fn(pred_va, target_val.to(device)).detach().cpu().item())
+                if val < best:
+                    best = val
+                    best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
+
+        if best_state is not None:
+            self.load_state_dict(best_state)
+        return self
+
+    def predict(
+        self,
+        e_features: torch.Tensor | np.ndarray,
+        rho0: torch.Tensor | np.ndarray,
+        *,
+        device: torch.device | str | None = None,
+        return_numpy: bool = True,
+    ) -> torch.Tensor | np.ndarray:
+        """Run inference (eval mode, no gradients).
+
+        Args:
+            e_features: Per-step features of shape ``(B, T, d_e)``.
+            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
+            device: Device for inference. Defaults to the model's current device.
+            return_numpy: If ``True``, return a NumPy array on CPU; otherwise return a tensor on ``device``.
+
+        Returns:
+            Predictions of shape ``(B, T, d_rho)``.
+        """
+        if device is None:
+            dev = next(self.parameters()).device
+        else:
+            dev = torch.device(device) if isinstance(device, str) else device
+        was_training = self.training
+        self.eval()
+        e_features_t = torch.as_tensor(e_features, dtype=torch.float32, device=dev)
+        r0_t = torch.as_tensor(rho0, dtype=torch.float32, device=dev)
+        with torch.no_grad():
+            out = self.forward(e_features_t, r0_t)
+        if was_training:
+            self.train()
+        if return_numpy:
+            return out.detach().cpu().numpy().astype(np.float32)
+        return out
+
     def _rho_to_features(self, rho: torch.Tensor) -> torch.Tensor:
         """Map predicted final density encodings to real feature vectors for the cut matrix.
 
@@ -353,155 +505,3 @@ class ProcessTensorSurrogate(nn.Module):
             if was_training:
                 self.train()
         return v_rows, weights
-
-    def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
-        """Run a forward pass.
-
-        Args:
-            e_features: Per-step features of shape ``(B, T, d_e)``.
-            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
-
-        Returns:
-            Predicted packed reduced states of shape ``(B, T, d_rho)``.
-
-        Raises:
-            ValueError: If input shapes are inconsistent.
-        """
-        b, t, _de = e_features.shape
-        if rho0.shape != (b, self.d_rho):
-            msg = f"rho0 mode expects rho0 (B,d_rho), got {rho0.shape}."
-            raise ValueError(msg)
-        side = rho0[:, None, :].expand(b, t, self._d_side)
-        x = torch.cat([e_features, side], dim=-1)
-        pe = _sinusoidal_positional_encoding(t, self.d_model, device=x.device, dtype=x.dtype)
-        h = self.in_ln(self.in_proj(x)) + pe
-        mask = _causal_mask(t, h.device)
-        h = self.encoder(h, mask=mask)
-        return self.head(h)
-
-    def predict(
-        self,
-        e_features: torch.Tensor | np.ndarray,
-        rho0: torch.Tensor | np.ndarray,
-        *,
-        device: torch.device | str | None = None,
-        return_numpy: bool = True,
-    ) -> torch.Tensor | np.ndarray:
-        """Run inference (eval mode, no gradients).
-
-        Args:
-            e_features: Per-step features of shape ``(B, T, d_e)``.
-            rho0: Initial reduced state encoding of shape ``(B, d_rho)``.
-            device: Device for inference. Defaults to the model's current device.
-            return_numpy: If ``True``, return a NumPy array on CPU; otherwise return a tensor on ``device``.
-
-        Returns:
-            Predictions of shape ``(B, T, d_rho)``.
-        """
-        if device is None:
-            dev = next(self.parameters()).device
-        else:
-            dev = torch.device(device) if isinstance(device, str) else device
-        was_training = self.training
-        self.eval()
-        e_features_t = torch.as_tensor(e_features, dtype=torch.float32, device=dev)
-        r0_t = torch.as_tensor(rho0, dtype=torch.float32, device=dev)
-        with torch.no_grad():
-            out = self.forward(e_features_t, r0_t)
-        if was_training:
-            self.train()
-        if return_numpy:
-            return out.detach().cpu().numpy().astype(np.float32)
-        return out
-
-    def fit(
-        self,
-        train_dataset: TensorDataset,
-        *,
-        val_dataset: TensorDataset | None = None,
-        epochs: int = 100,
-        lr: float = 2e-3,
-        batch_size: int = 64,
-        grad_clip: float = 1.0,
-        prefix_loss: str = "full",
-        device: torch.device | None = None,
-    ) -> ProcessTensorSurrogate:
-        """Fit the model on sequence-record training data using MSE loss.
-
-        Args:
-            train_dataset: TensorDataset containing tensors ``(E, rho0, target)``.
-            val_dataset: Optional validation dataset with the same tensor layout.
-            epochs: Number of epochs.
-            lr: Learning rate.
-            batch_size: Batch size.
-            grad_clip: Gradient clipping norm (0 disables clipping).
-            prefix_loss: Loss horizon mode: ``"full"``, ``"random"``, or ``"all"``.
-            device: Training device. Defaults to the model's current device.
-
-        Returns:
-            Self (for chaining).
-
-        Raises:
-            ValueError: If ``prefix_loss`` is invalid.
-        """
-        if device is None:
-            device = next(self.parameters()).device
-        self.to(device)
-
-        e_train, rho0_train, target_train = train_dataset.tensors
-        self.num_interventions = int(target_train.shape[1])
-        train_ds = TensorDataset(e_train, rho0_train, target_train)
-
-        has_val = val_dataset is not None
-        if has_val:
-            e_val, rho0_val, target_val = val_dataset.tensors
-
-        opt = torch.optim.Adam(self.parameters(), lr=float(lr))
-        loss_fn = nn.MSELoss()
-        bs = min(int(batch_size), max(1, int(e_train.shape[0])))
-        loader = DataLoader(train_ds, batch_size=bs, shuffle=True)
-        k_max = int(target_train.shape[1])
-        best = float("inf")
-        best_state: dict[str, Any] | None = None
-
-        for _ep in range(int(epochs)):
-            self.train()
-            for e_cpu, rho0_cpu, tgt_cpu in loader:
-                e_batch = e_cpu.to(device)
-                rho0_b = rho0_cpu.to(device)
-                tgt_b = tgt_cpu.to(device)
-                opt.zero_grad(set_to_none=True)
-                if prefix_loss == "full" or k_max <= 1:
-                    pred = self(e_batch, rho0_b)
-                    loss = loss_fn(pred, tgt_b)
-                elif prefix_loss == "random":
-                    prefix_len = int(torch.randint(low=1, high=k_max + 1, size=(1,), device=e_batch.device).item())
-                    pred = self(e_batch[:, :prefix_len, :], rho0_b)
-                    loss = loss_fn(pred, tgt_b[:, :prefix_len, :])
-                elif prefix_loss == "all":
-                    losses = []
-                    for prefix_len in range(1, k_max + 1):
-                        pred_prefix = self(e_batch[:, :prefix_len, :], rho0_b)
-                        losses.append(loss_fn(pred_prefix, tgt_b[:, :prefix_len, :]))
-                    loss = torch.stack(losses, dim=0).mean()
-                else:
-                    msg = f"Unknown prefix_loss: {prefix_loss!r}"
-                    raise ValueError(msg)
-
-                loss.backward()
-                if grad_clip and float(grad_clip) > 0:
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), float(grad_clip))
-                opt.step()
-
-            if has_val:
-                self.eval()
-                with torch.no_grad():
-                    pred_va = self(e_val.to(device), rho0_val.to(device))
-                    val = float(loss_fn(pred_va, target_val.to(device)).detach().cpu().item())
-                if val < best:
-                    best = val
-                    best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
-
-        if best_state is not None:
-            self.load_state_dict(best_state)
-        return self

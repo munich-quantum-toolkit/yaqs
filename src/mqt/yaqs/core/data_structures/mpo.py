@@ -156,6 +156,8 @@ class MPO:
     length: int
     physical_dimension: int
 
+    # Construction and physical dimensions
+
     @classmethod
     def _from_tensor_window(cls, tensors: list[ComplexTensor]) -> MPO:
         """Build a trusted internal MPO window whose exterior bonds need not be one.
@@ -173,111 +175,44 @@ class MPO:
         window.physical_dimension = int(tensors[0].shape[0])
         return window
 
-    def apply_local_operator(
-        self,
-        site: int,
-        op: np.ndarray,
-        *,
-        left_action: bool = True,
-    ) -> None:
-        """Apply a local operator to the physical legs of one MPO site in place.
+    @property
+    def physical_dimensions(self) -> tuple[int, ...]:
+        """Local physical dimension derived from each site tensor."""
+        return tuple(int(tensor.shape[0]) for tensor in self.tensors)
+
+    # Operator factories
+
+    @classmethod
+    def identity(cls, length: int, physical_dimension: int = 2) -> MPO:
+        """Construct an identity MPO.
 
         Args:
-            site: Site index.
-            op: Local operator as a ``(d, d)`` matrix or ``(d, d, d, d)`` tensor.
-            left_action: If True, apply ``op`` on the left (output) leg.
-
-        Raises:
-            ValueError: If ``op`` is incompatible with the site physical dimensions.
-        """
-        tensor = self.tensors[site]
-        d_out, d_in, dim_left, dim_right = tensor.shape
-        d2 = d_out * d_in
-
-        if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
-            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
-            tensor_new = (
-                np.einsum("ac,cbk->abk", op, tensor_view) if left_action else np.einsum("abk,bc->ack", tensor_view, op)
-            )
-            self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
-            return
-
-        if op.ndim == 2:
-            if op.shape != (d2, d2):
-                msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
-                raise ValueError(msg)
-            op_mat = op
-        elif op.ndim == 4:
-            if op.shape != (d_out, d_in, d_out, d_in):
-                msg = f"op tensor shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
-                raise ValueError(msg)
-            op_mat = op.reshape(d2, d2)
-        else:
-            msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
-            raise ValueError(msg)
-
-        tensor_phys = tensor.reshape(d2, dim_left * dim_right)
-        if left_action:
-            tensor_new = op_mat @ tensor_phys
-        else:
-            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
-            op4 = op_mat.reshape(d_out, d_in, d_out, d_in)
-            tensor_new = np.einsum("oiOI,oib->oOb", op4, tensor_view).reshape(d2, dim_left * dim_right)
-        self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
-
-    def partial_trace_site(self, site: int) -> None:
-        """Partial trace over the physical legs of a single MPO site in place.
-
-        Args:
-            site: Site index.
-
-        Raises:
-            ValueError: If the site physical dimensions are not square.
-        """
-        tensor = self.tensors[site]
-        d_out, d_in, dim_left, dim_right = tensor.shape
-        if d_out != d_in:
-            msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
-            raise ValueError(msg)
-
-        traced = np.zeros((1, 1, dim_left, dim_right), dtype=tensor.dtype)
-        for s in range(d_out):
-            traced[0, 0] += tensor[s, s]
-        self.tensors[site] = traced
-        if site == 0:
-            self.physical_dimension = 1
-
-    def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
-        """Return a new MPO with all sites not in ``keep_sites`` traced out.
-
-        Args:
-            keep_sites: Site indices to retain.
+            length: Number of sites.
+            physical_dimension: Local Hilbert-space dimension per site (default 2 for qubits).
 
         Returns:
-            A new MPO with non-kept sites traced out.
-
-        Raises:
-            ValueError: If ``keep_sites`` is empty or contains out-of-range indices.
+            An MPO representing the identity operator on ``length`` sites.
         """
-        if not keep_sites:
-            msg = "keep_sites must be non-empty."
-            raise ValueError(msg)
+        mpo = cls()
+        mpo.init_identity(length, physical_dimension=physical_dimension)
+        return mpo
 
-        keep = sorted(set(keep_sites))
-        if keep[0] < 0 or keep[-1] >= self.length:
-            msg = f"keep_sites indices {keep} out of range for MPO length {self.length}."
-            raise ValueError(msg)
+    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
+        """Initialize this MPO in place as the identity operator.
 
-        new = MPO()
-        new.length = self.length
-        new.physical_dimension = self.physical_dimension
-        new.tensors = [t.copy() for t in self.tensors]
+        Prefer :meth:`identity` when constructing a new MPO.
 
-        for i in range(new.length):
-            if i not in keep:
-                new.partial_trace_site(i)
+        Args:
+            length: Number of sites.
+            physical_dimension: Local dimension per site (default 2).
+        """
+        site = make_identity_site(physical_dimension)
+        self.length = length
+        self.physical_dimension = physical_dimension
 
-        return new
+        self.tensors = []
+        for _ in range(length):
+            self.tensors.append(np.array(site, copy=True))
 
     @classmethod
     def from_local_ops(cls, local_ops: list[np.ndarray]) -> MPO:
@@ -318,6 +253,449 @@ class MPO:
         mpo.physical_dimension = d if d is not None else 0
         assert mpo.check_if_valid_mpo(), "Constructed MPO is invalid."
         return mpo
+
+    @classmethod
+    def from_matrix(
+        cls,
+        mat: np.ndarray,
+        d: int,
+        max_bond: int | None = None,
+        cutoff: float = 1e-12,
+    ) -> MPO:
+        """Factorize a dense matrix into an MPO with uniform local dimension ``d``.
+
+        Each site has local shape ``(d, d)``.
+        The number of sites ``n`` is inferred from the relation:
+
+            mat.shape = (d**n, d**n)
+
+        The input uses the public dense order: site ``0`` is the
+        least-significant, fastest-varying subsystem. This method is the inverse
+        of :meth:`to_matrix` when no singular values are truncated.
+
+        Args:
+            mat (np.ndarray):
+                Square matrix of shape ``(d**n, d**n)`` in site-0-LSB order.
+            d (int):
+                Physical dimension per site. Must satisfy ``d > 0``.
+            max_bond (int | None):
+                Maximum allowed bond dimension (before truncation).
+            cutoff (float):
+                Singular values ``<= cutoff`` are discarded. By default cutoff=1e-12: all numerically non-zero
+                singular values are included.
+
+        Returns:
+            MPO:
+                An MPO with ``n`` sites, uniform physical dimension ``d`` per site,
+                and bond dimensions determined by SVD truncation.
+
+        Raises:
+            ValueError:
+                If ``d <= 0``;
+                If ``d == 1`` but the matrix is not ``1 x 1``;
+                If the matrix is not square;
+                If ``rows`` is not a power of ``d``;
+                If the inferred number of sites ``n < 1``.
+        """
+        if d <= 0:
+            msg = f"Physical dimension d must be > 0, got d={d}."
+            raise ValueError(msg)
+
+        if np.ndim(mat) != 2:
+            msg = "Matrix must be a 2-D array for uniform MPO factorization."
+            raise ValueError(msg)
+
+        rows, cols = mat.shape
+
+        if rows != cols:
+            msg = "Matrix must be square for uniform MPO factorization."
+            raise ValueError(msg)
+
+        if d == 1:
+            if rows != 1:
+                msg = "For d == 1 the matrix must be 1x1 since 1**n = 1 for any n."
+                raise ValueError(msg)
+            n = 1
+        else:
+            n_float = np.log(rows) / np.log(d)
+            n = round(n_float)
+
+            if n < 1:
+                msg = f"Inferred chain length n={n} is invalid; matrix dimension {rows} too small for base d={d}."
+                raise ValueError(msg)
+
+            if not np.isclose(n_float, n):
+                msg = f"Matrix dimension {rows} is not a power of d={d}."
+                raise ValueError(msg)
+
+        mat = np.asarray(mat, dtype=np.complex128)
+
+        left_rank = 1
+        rem = mat.reshape(1, rows, cols)
+
+        tensors: list[np.ndarray] = []
+
+        def _truncate(s: np.ndarray) -> int:
+            if cutoff <= 0.0:
+                r = int(s.size)
+                if max_bond is not None:
+                    r = min(r, max_bond)
+                return r
+            return linalg.truncate(
+                s,
+                mode="hard_cutoff",
+                threshold=cutoff,
+                max_bond_dim=max_bond,
+                min_keep=1,
+            )
+
+        for k in range(n - 1):
+            rest = d ** (n - k - 1)
+
+            rem = rem.reshape(left_rank, d, rest, d, rest)
+            rem_perm = np.transpose(rem, (1, 3, 0, 2, 4))
+            x = rem_perm.reshape(d * d * left_rank, rest * rest)
+
+            u, s, vh = linalg.svd(x, full_matrices=False)
+
+            r_keep = _truncate(s)
+
+            u = u[:, :r_keep]
+            s = s[:r_keep]
+            vh = vh[:r_keep, :]
+
+            t_k = u.reshape(d, d, left_rank, r_keep)
+            tensors.append(t_k)
+
+            rem = (s[:, None] * vh).reshape(r_keep, rest, rest)
+            left_rank = r_keep
+
+        rem = rem.reshape(left_rank, d, d)
+        t_last = np.transpose(rem, (1, 2, 0)).reshape(d, d, left_rank, 1)
+        tensors.append(t_last)
+
+        mpo = cls()
+        mpo.tensors = tensors
+        mpo.length = n
+        mpo.physical_dimension = d
+
+        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
+
+        return mpo.reflected()
+
+    @classmethod
+    def from_gate(
+        cls,
+        gate: BaseGate,
+        chain_length: int,
+        *,
+        physical_dimensions: list[int] | tuple[int, ...] | None = None,
+    ) -> MPO:
+        """Build an MPO for a gate on two or more qubits.
+
+        A support window spans ``min(sites)`` through ``max(sites)``, including
+        spectators. A full-chain MPO adds identity tensors outside that window.
+
+        Args:
+            gate: Gate with sites and either its tensor or MPO tensors set.
+            chain_length: Number of sites in the support window or full chain.
+            physical_dimensions: Optional local dimensions for all chain sites,
+                including non-qubit spectators.
+
+        Returns:
+            Gate MPO for :meth:`multiply`.
+
+        Raises:
+            ValueError: If gate support or chain length is invalid, or fewer than two qubits are given.
+        """
+        if gate.interaction < 2:
+            msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
+            raise ValueError(msg)
+        if len(gate.sites) != gate.interaction:
+            msg = f"from_gate requires {gate.interaction} sites, got {len(gate.sites)}."
+            raise ValueError(msg)
+
+        first_site = min(gate.sites)
+        last_site = max(gate.sites)
+        support_len = last_site - first_site + 1
+        if chain_length < support_len:
+            msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
+            raise ValueError(msg)
+        if chain_length > support_len and (first_site < 0 or last_site >= chain_length):
+            msg = f"gate sites {gate.sites} are outside the chain of length {chain_length}."
+            raise ValueError(msg)
+
+        dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * chain_length
+        if len(dimensions) != chain_length:
+            msg = f"Expected {chain_length} physical dimensions, got {len(dimensions)}."
+            raise ValueError(msg)
+        support_dimensions = dimensions if chain_length == support_len else dimensions[first_site : last_site + 1]
+        support = get_support_mpo(
+            gate,
+            first_site=first_site,
+            last_site=last_site,
+            physical_dimensions=support_dimensions,
+        )
+        if chain_length == support_len:
+            tensors = support
+        else:
+            tensors = []
+            for site in range(chain_length):
+                if site < first_site or site > last_site:
+                    tensors.append(make_identity_site(dimensions[site]))
+                else:
+                    tensors.append(support[site - first_site])
+
+        mpo = cls()
+        mpo.custom(tensors, transpose=False)
+        return mpo
+
+    # The shared tensor validator raises the documented ValueError.
+    def custom(
+        self,
+        tensors: list[NDArray[np.complex128]],
+        *,
+        transpose: bool = True,
+    ) -> None:
+        """Custom MPO from tensors.
+
+        Initialize the custom MPO (Matrix Product Operator) with the given tensors.
+
+        Args:
+            tensors: One tensor per site in ascending site order. With
+                ``transpose=True``, each tensor uses
+                ``(left, right, physical_out, physical_in)`` axes. Otherwise,
+                each tensor already uses
+                ``(physical_out, physical_in, left, right)`` axes.
+            transpose: Convert tensors from
+                ``(left, right, physical_out, physical_in)`` to the internal
+                ``(physical_out, physical_in, left, right)`` layout.
+
+        Notes:
+            This method sets the tensors, optionally transposes them, checks if the MPO is valid,
+            and initializes the length and physical dimension of the MPO.
+
+        Raises:
+            ValueError: If ``tensors`` is empty, nonnumeric, nonfinite, has the wrong
+                rank, has unequal physical legs, or has invalid boundary or adjacent bonds.
+        """  # ruff: ignore[docstring-extraneous-exception]
+        self.tensors = _prepare_mpo_tensors(tensors, transpose=transpose)
+        self.length = len(self.tensors)
+        self.physical_dimension = self.tensors[0].shape[0]
+
+    def finite_state_machine(
+        self,
+        length: int,
+        left_bound: NDArray[np.complex128],
+        inner: NDArray[np.complex128],
+        right_bound: NDArray[np.complex128],
+    ) -> None:
+        """Custom Hamiltonian from finite state machine MPO.
+
+        Initialize a custom Hamiltonian as a Matrix Product Operator (MPO).
+        This method sets up the Hamiltonian using the provided boundary and inner tensors.
+        The tensors are transposed to match the expected shape for MPOs.
+
+        Args:
+            length (int): The number of tensors in the MPO.
+            left_bound (NDArray[np.complex128]): The tensor at the left boundary.
+            inner (NDArray[np.complex128]): The tensor for the inner sites.
+            right_bound (NDArray[np.complex128]): The tensor at the right boundary.
+
+        Raises:
+            ValueError: If ``length`` is inconsistent or the tensors do not form a
+                finite, square, open-boundary MPO chain.
+        """
+        tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
+        if len(tensors) != length:
+            msg = f"Expected {length} finite-state-machine tensors, got {len(tensors)}."
+            raise ValueError(msg)
+        self.tensors = _prepare_mpo_tensors(tensors, transpose=True)
+        self.length = length
+        self.physical_dimension = self.tensors[0].shape[0]
+
+    def from_pauli_sum(
+        self,
+        *,
+        terms: list[tuple[complex | float, str]],
+        length: int,
+        physical_dimension: int = 2,
+        tol: float = 1e-12,
+        max_bond_dim: int | None = None,
+        n_sweeps: int = 2,
+    ) -> None:
+        """Build this MPO in place from a sum of Pauli-string terms.
+
+        A finite state machine combines the terms before optional SVD compression.
+
+        Args:
+            terms: ``(coefficient, spec)`` pairs; examples of ``spec`` are
+                ``"Z0 Z1"``, ``"X7"``, and ``""`` for the identity.
+            length: Number of sites.
+            physical_dimension: Local dimension; only two is supported.
+            tol: SVD threshold for final compression.
+            max_bond_dim: Optional hard cap on the kept bond dimension.
+            n_sweeps: Non-negative number of compression sweeps.
+
+        Raises:
+            ValueError: If length, local dimension, site indices, or term specifications are invalid.
+        """
+        if physical_dimension != 2:
+            msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
+            raise ValueError(msg)
+        if length <= 0:
+            msg = "length must be positive."
+            raise ValueError(msg)
+
+        self.length = length
+        self.physical_dimension = physical_dimension
+
+        if not terms:
+            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+            return
+
+        # 1. Parse terms into dense lists of operator names.
+        #    Structure: terms list of (coeff, [op_at_site_0, op_at_site_1, ...])
+        parsed_terms: list[tuple[complex | float, list[str]]] = []
+        for coeff, spec in terms:
+            ops_map = self._parse_pauli_string(spec)
+            # Validate sites
+            for site, lab in ops_map.items():
+                if not (0 <= site < length):
+                    msg = f"Site index {site} outside [0, {length - 1}]."
+                    raise ValueError(msg)
+                if lab not in self._VALID:
+                    msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
+                    raise ValueError(msg)
+
+            # Fill missing sites with Identity "I"
+            op_list = [ops_map.get(i, "I") for i in range(length)]
+            parsed_terms.append((coeff, op_list))
+
+        # 2. Assign State IDs (Right-to-Left)
+        #    We identify unique "suffix states" needed at each bond.
+        #    A state at bond i is uniquely defined by the pair (Operator at site i, State at bond i+1).
+
+        # `term_trajectories[term_idx][i]` stores the State ID at bond `i` for `term_idx`.
+        # Bond indices range from 0 (left of site 0) to L (right of site L-1).
+        term_trajectories = [[0] * (length + 1) for _ in range(len(parsed_terms))]
+
+        # Initialize right boundary (Bond L): All terms end at the "sink" state (ID 0).
+        for t_idx in range(len(parsed_terms)):
+            term_trajectories[t_idx][length] = 0
+
+        # bond_state_maps[i] stores the mapping: (Op_str, Next_State_ID) -> Current_State_ID
+        bond_state_maps: list[dict[tuple[str, int], int]] = [{} for _ in range(length + 1)]
+
+        # Sweep Right-to-Left (sites L-1 down to 1) to build the FSM transitions.
+        # We stop at bond 1. Bond 0 is always the single "Start" state.
+        for i in range(length - 1, 0, -1):
+            next_bond = i + 1
+            current_bond = i
+
+            unique_states_map = bond_state_maps[current_bond]
+            next_id = 0
+
+            for t_idx, (_, ops) in enumerate(parsed_terms):
+                op = ops[i]
+                next_state = term_trajectories[t_idx][next_bond]
+                signature = (op, next_state)
+
+                if signature not in unique_states_map:
+                    unique_states_map[signature] = next_id
+                    next_id += 1
+
+                term_trajectories[t_idx][current_bond] = unique_states_map[signature]
+
+        # 3. Build Tensors (Left-to-Right)
+        self.tensors = []
+        paulis = self._PAULI_2
+
+        for i in range(length):
+            # Determine bond dimensions based on number of unique states at boundaries
+            if i == 0:
+                d_left = 1
+                d_right = 1 if length == 1 else len(bond_state_maps[1])
+                # Handle edge case where d_right is 0 (should not happen if terms exist)
+                if length > 1 and d_right == 0:
+                    d_right = 1
+            else:
+                d_left = len(bond_state_maps[i])
+                d_right = 1 if i == length - 1 else len(bond_state_maps[i + 1])
+
+            # Allocate tensor: (phys_out, phys_in, left, right)
+            tensor = np.zeros((2, 2, d_left, d_right), dtype=complex)
+
+            if i == 0:
+                # First site: Accumulate coefficients and split into initial branches.
+                for t_idx, (coeff, ops) in enumerate(parsed_terms):
+                    op_name = ops[i]
+                    op_mat = paulis[op_name]
+                    target_state = term_trajectories[t_idx][1]
+
+                    # Accumulate contribution. Multiple terms may map to the same target state.
+                    tensor[:, :, 0, target_state] += coeff * op_mat
+            else:
+                # Internal sites: deterministic transitions.
+                # Each row (current_id) in the tensor corresponds to a unique state from Step 2.
+                # This state maps to exactly one (op, next_id) pair.
+                map_i = bond_state_maps[i]
+
+                for (op_name, next_id), current_id in map_i.items():
+                    op_mat = paulis[op_name]
+                    tensor[:, :, current_id, next_id] = op_mat
+
+            self.tensors.append(tensor)
+
+        # 4. Final Compression
+        #    Compress shared prefixes left after suffix merging, within the
+        #    configured tolerance, rank cap, and sweep count.
+        self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
+        assert self.check_if_valid_mpo(), "MPO initialized wrong"
+
+    @classmethod
+    def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
+        """Parse a Pauli-string specification into a site-to-operator mapping.
+
+        Converts a compact string representation of a Pauli operator product
+        into a dictionary mapping site indices to Pauli labels.
+
+        The expected format is a whitespace- or comma-separated list of tokens:
+            "X0 Y2 Z5"
+
+        Args:
+            spec: Pauli-string specification.
+
+        Returns:
+            dict[int, str]: Mapping from site index to Pauli label
+            ('I', 'X', 'Y', or 'Z'). An empty dictionary corresponds to the
+            identity operator.
+
+        Raises:
+            ValueError: If:
+                - a site index appears more than once,
+                - an invalid token is encountered,
+                - or the specification contains malformed entries.
+
+        """
+        s = spec.replace(",", " ").strip()
+        if not s:
+            return {}
+        out: dict[int, str] = {}
+        for op, idx in cls._PAULI_TOKEN_RE.findall(s):
+            site = int(idx)
+            op_up = op.upper()
+            if site in out:
+                msg = f"Duplicate site {site} in spec '{spec}'."
+                raise ValueError(msg)
+            out[site] = op_up
+        cleaned = cls._PAULI_TOKEN_RE.sub("", s)
+        if cleaned.split():
+            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
+            raise ValueError(msg)
+        return out
+
+    # Hamiltonian factories
 
     @classmethod
     def pauli(
@@ -1087,307 +1465,115 @@ class MPO:
             ))
         return channels
 
-    @classmethod
-    def identity(cls, length: int, physical_dimension: int = 2) -> MPO:
-        """Construct an identity MPO.
+    # Local operations and partial traces
 
-        Args:
-            length: Number of sites.
-            physical_dimension: Local Hilbert-space dimension per site (default 2 for qubits).
-
-        Returns:
-            An MPO representing the identity operator on ``length`` sites.
-        """
-        mpo = cls()
-        mpo.init_identity(length, physical_dimension=physical_dimension)
-        return mpo
-
-    @classmethod
-    def from_gate(
-        cls,
-        gate: BaseGate,
-        chain_length: int,
-        *,
-        physical_dimensions: list[int] | tuple[int, ...] | None = None,
-    ) -> MPO:
-        """Build an MPO for a gate on two or more qubits.
-
-        A support window spans ``min(sites)`` through ``max(sites)``, including
-        spectators. A full-chain MPO adds identity tensors outside that window.
-
-        Args:
-            gate: Gate with sites and either its tensor or MPO tensors set.
-            chain_length: Number of sites in the support window or full chain.
-            physical_dimensions: Optional local dimensions for all chain sites,
-                including non-qubit spectators.
-
-        Returns:
-            Gate MPO for :meth:`multiply`.
-
-        Raises:
-            ValueError: If gate support or chain length is invalid, or fewer than two qubits are given.
-        """
-        if gate.interaction < 2:
-            msg = f"from_gate requires at least a two-qubit gate, got interaction {gate.interaction}."
-            raise ValueError(msg)
-        if len(gate.sites) != gate.interaction:
-            msg = f"from_gate requires {gate.interaction} sites, got {len(gate.sites)}."
-            raise ValueError(msg)
-
-        first_site = min(gate.sites)
-        last_site = max(gate.sites)
-        support_len = last_site - first_site + 1
-        if chain_length < support_len:
-            msg = f"chain_length {chain_length} is smaller than gate support length {support_len}."
-            raise ValueError(msg)
-        if chain_length > support_len and (first_site < 0 or last_site >= chain_length):
-            msg = f"gate sites {gate.sites} are outside the chain of length {chain_length}."
-            raise ValueError(msg)
-
-        dimensions = tuple(physical_dimensions) if physical_dimensions is not None else (2,) * chain_length
-        if len(dimensions) != chain_length:
-            msg = f"Expected {chain_length} physical dimensions, got {len(dimensions)}."
-            raise ValueError(msg)
-        support_dimensions = dimensions if chain_length == support_len else dimensions[first_site : last_site + 1]
-        support = get_support_mpo(
-            gate,
-            first_site=first_site,
-            last_site=last_site,
-            physical_dimensions=support_dimensions,
-        )
-        if chain_length == support_len:
-            tensors = support
-        else:
-            tensors = []
-            for site in range(chain_length):
-                if site < first_site or site > last_site:
-                    tensors.append(make_identity_site(dimensions[site]))
-                else:
-                    tensors.append(support[site - first_site])
-
-        mpo = cls()
-        mpo.custom(tensors, transpose=False)
-        return mpo
-
-    def init_identity(self, length: int, physical_dimension: int = 2) -> None:
-        """Initialize this MPO in place as the identity operator.
-
-        Prefer :meth:`identity` when constructing a new MPO.
-
-        Args:
-            length: Number of sites.
-            physical_dimension: Local dimension per site (default 2).
-        """
-        site = make_identity_site(physical_dimension)
-        self.length = length
-        self.physical_dimension = physical_dimension
-
-        self.tensors = []
-        for _ in range(length):
-            self.tensors.append(np.array(site, copy=True))
-
-    def finite_state_machine(
+    def apply_local_operator(
         self,
-        length: int,
-        left_bound: NDArray[np.complex128],
-        inner: NDArray[np.complex128],
-        right_bound: NDArray[np.complex128],
-    ) -> None:
-        """Custom Hamiltonian from finite state machine MPO.
-
-        Initialize a custom Hamiltonian as a Matrix Product Operator (MPO).
-        This method sets up the Hamiltonian using the provided boundary and inner tensors.
-        The tensors are transposed to match the expected shape for MPOs.
-
-        Args:
-            length (int): The number of tensors in the MPO.
-            left_bound (NDArray[np.complex128]): The tensor at the left boundary.
-            inner (NDArray[np.complex128]): The tensor for the inner sites.
-            right_bound (NDArray[np.complex128]): The tensor at the right boundary.
-
-        Raises:
-            ValueError: If ``length`` is inconsistent or the tensors do not form a
-                finite, square, open-boundary MPO chain.
-        """
-        tensors = [left_bound] + [inner] * (length - 2) + [right_bound]
-        if len(tensors) != length:
-            msg = f"Expected {length} finite-state-machine tensors, got {len(tensors)}."
-            raise ValueError(msg)
-        self.tensors = _prepare_mpo_tensors(tensors, transpose=True)
-        self.length = length
-        self.physical_dimension = self.tensors[0].shape[0]
-
-    # The shared tensor validator raises the documented ValueError.
-    def custom(
-        self,
-        tensors: list[NDArray[np.complex128]],
+        site: int,
+        op: np.ndarray,
         *,
-        transpose: bool = True,
+        left_action: bool = True,
     ) -> None:
-        """Custom MPO from tensors.
-
-        Initialize the custom MPO (Matrix Product Operator) with the given tensors.
+        """Apply a local operator to the physical legs of one MPO site in place.
 
         Args:
-            tensors: One tensor per site in ascending site order. With
-                ``transpose=True``, each tensor uses
-                ``(left, right, physical_out, physical_in)`` axes. Otherwise,
-                each tensor already uses
-                ``(physical_out, physical_in, left, right)`` axes.
-            transpose: Convert tensors from
-                ``(left, right, physical_out, physical_in)`` to the internal
-                ``(physical_out, physical_in, left, right)`` layout.
-
-        Notes:
-            This method sets the tensors, optionally transposes them, checks if the MPO is valid,
-            and initializes the length and physical dimension of the MPO.
+            site: Site index.
+            op: Local operator as a ``(d, d)`` matrix or ``(d, d, d, d)`` tensor.
+            left_action: If True, apply ``op`` on the left (output) leg.
 
         Raises:
-            ValueError: If ``tensors`` is empty, nonnumeric, nonfinite, has the wrong
-                rank, has unequal physical legs, or has invalid boundary or adjacent bonds.
-        """  # ruff: ignore[docstring-extraneous-exception]
-        self.tensors = _prepare_mpo_tensors(tensors, transpose=transpose)
-        self.length = len(self.tensors)
-        self.physical_dimension = self.tensors[0].shape[0]
-
-    def from_pauli_sum(
-        self,
-        *,
-        terms: list[tuple[complex | float, str]],
-        length: int,
-        physical_dimension: int = 2,
-        tol: float = 1e-12,
-        max_bond_dim: int | None = None,
-        n_sweeps: int = 2,
-    ) -> None:
-        """Build this MPO in place from a sum of Pauli-string terms.
-
-        A finite state machine combines the terms before optional SVD compression.
-
-        Args:
-            terms: ``(coefficient, spec)`` pairs; examples of ``spec`` are
-                ``"Z0 Z1"``, ``"X7"``, and ``""`` for the identity.
-            length: Number of sites.
-            physical_dimension: Local dimension; only two is supported.
-            tol: SVD threshold for final compression.
-            max_bond_dim: Optional hard cap on the kept bond dimension.
-            n_sweeps: Non-negative number of compression sweeps.
-
-        Raises:
-            ValueError: If length, local dimension, site indices, or term specifications are invalid.
+            ValueError: If ``op`` is incompatible with the site physical dimensions.
         """
-        if physical_dimension != 2:
-            msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
-            raise ValueError(msg)
-        if length <= 0:
-            msg = "length must be positive."
-            raise ValueError(msg)
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
+        d2 = d_out * d_in
 
-        self.length = length
-        self.physical_dimension = physical_dimension
-
-        if not terms:
-            self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
+        if op.ndim == 2 and op.shape == (d_out, d_out) and d_out == d_in:
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            tensor_new = (
+                np.einsum("ac,cbk->abk", op, tensor_view) if left_action else np.einsum("abk,bc->ack", tensor_view, op)
+            )
+            self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
             return
 
-        # 1. Parse terms into dense lists of operator names.
-        #    Structure: terms list of (coeff, [op_at_site_0, op_at_site_1, ...])
-        parsed_terms: list[tuple[complex | float, list[str]]] = []
-        for coeff, spec in terms:
-            ops_map = self._parse_pauli_string(spec)
-            # Validate sites
-            for site, lab in ops_map.items():
-                if not (0 <= site < length):
-                    msg = f"Site index {site} outside [0, {length - 1}]."
-                    raise ValueError(msg)
-                if lab not in self._VALID:
-                    msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
-                    raise ValueError(msg)
+        if op.ndim == 2:
+            if op.shape != (d2, d2):
+                msg = f"op shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op
+        elif op.ndim == 4:
+            if op.shape != (d_out, d_in, d_out, d_in):
+                msg = f"op tensor shape {op.shape} incompatible with physical dim {d_out}x{d_in}."
+                raise ValueError(msg)
+            op_mat = op.reshape(d2, d2)
+        else:
+            msg = f"Expected op with 2 or 4 dims, got {op.ndim}."
+            raise ValueError(msg)
 
-            # Fill missing sites with Identity "I"
-            op_list = [ops_map.get(i, "I") for i in range(length)]
-            parsed_terms.append((coeff, op_list))
+        tensor_phys = tensor.reshape(d2, dim_left * dim_right)
+        if left_action:
+            tensor_new = op_mat @ tensor_phys
+        else:
+            tensor_view = tensor.reshape(d_out, d_in, dim_left * dim_right)
+            op4 = op_mat.reshape(d_out, d_in, d_out, d_in)
+            tensor_new = np.einsum("oiOI,oib->oOb", op4, tensor_view).reshape(d2, dim_left * dim_right)
+        self.tensors[site] = tensor_new.reshape(d_out, d_in, dim_left, dim_right)
 
-        # 2. Assign State IDs (Right-to-Left)
-        #    We identify unique "suffix states" needed at each bond.
-        #    A state at bond i is uniquely defined by the pair (Operator at site i, State at bond i+1).
+    def partial_trace_site(self, site: int) -> None:
+        """Partial trace over the physical legs of a single MPO site in place.
 
-        # `term_trajectories[term_idx][i]` stores the State ID at bond `i` for `term_idx`.
-        # Bond indices range from 0 (left of site 0) to L (right of site L-1).
-        term_trajectories = [[0] * (length + 1) for _ in range(len(parsed_terms))]
+        Args:
+            site: Site index.
 
-        # Initialize right boundary (Bond L): All terms end at the "sink" state (ID 0).
-        for t_idx in range(len(parsed_terms)):
-            term_trajectories[t_idx][length] = 0
+        Raises:
+            ValueError: If the site physical dimensions are not square.
+        """
+        tensor = self.tensors[site]
+        d_out, d_in, dim_left, dim_right = tensor.shape
+        if d_out != d_in:
+            msg = f"Cannot trace site with non-square physical dims ({d_out}, {d_in})."
+            raise ValueError(msg)
 
-        # bond_state_maps[i] stores the mapping: (Op_str, Next_State_ID) -> Current_State_ID
-        bond_state_maps: list[dict[tuple[str, int], int]] = [{} for _ in range(length + 1)]
+        traced = np.zeros((1, 1, dim_left, dim_right), dtype=tensor.dtype)
+        for s in range(d_out):
+            traced[0, 0] += tensor[s, s]
+        self.tensors[site] = traced
+        if site == 0:
+            self.physical_dimension = 1
 
-        # Sweep Right-to-Left (sites L-1 down to 1) to build the FSM transitions.
-        # We stop at bond 1. Bond 0 is always the single "Start" state.
-        for i in range(length - 1, 0, -1):
-            next_bond = i + 1
-            current_bond = i
+    def partial_trace_sites(self, keep_sites: list[int]) -> MPO:
+        """Return a new MPO with all sites not in ``keep_sites`` traced out.
 
-            unique_states_map = bond_state_maps[current_bond]
-            next_id = 0
+        Args:
+            keep_sites: Site indices to retain.
 
-            for t_idx, (_, ops) in enumerate(parsed_terms):
-                op = ops[i]
-                next_state = term_trajectories[t_idx][next_bond]
-                signature = (op, next_state)
+        Returns:
+            A new MPO with non-kept sites traced out.
 
-                if signature not in unique_states_map:
-                    unique_states_map[signature] = next_id
-                    next_id += 1
+        Raises:
+            ValueError: If ``keep_sites`` is empty or contains out-of-range indices.
+        """
+        if not keep_sites:
+            msg = "keep_sites must be non-empty."
+            raise ValueError(msg)
 
-                term_trajectories[t_idx][current_bond] = unique_states_map[signature]
+        keep = sorted(set(keep_sites))
+        if keep[0] < 0 or keep[-1] >= self.length:
+            msg = f"keep_sites indices {keep} out of range for MPO length {self.length}."
+            raise ValueError(msg)
 
-        # 3. Build Tensors (Left-to-Right)
-        self.tensors = []
-        paulis = self._PAULI_2
+        new = MPO()
+        new.length = self.length
+        new.physical_dimension = self.physical_dimension
+        new.tensors = [t.copy() for t in self.tensors]
 
-        for i in range(length):
-            # Determine bond dimensions based on number of unique states at boundaries
-            if i == 0:
-                d_left = 1
-                d_right = 1 if length == 1 else len(bond_state_maps[1])
-                # Handle edge case where d_right is 0 (should not happen if terms exist)
-                if length > 1 and d_right == 0:
-                    d_right = 1
-            else:
-                d_left = len(bond_state_maps[i])
-                d_right = 1 if i == length - 1 else len(bond_state_maps[i + 1])
+        for i in range(new.length):
+            if i not in keep:
+                new.partial_trace_site(i)
 
-            # Allocate tensor: (phys_out, phys_in, left, right)
-            tensor = np.zeros((2, 2, d_left, d_right), dtype=complex)
+        return new
 
-            if i == 0:
-                # First site: Accumulate coefficients and split into initial branches.
-                for t_idx, (coeff, ops) in enumerate(parsed_terms):
-                    op_name = ops[i]
-                    op_mat = paulis[op_name]
-                    target_state = term_trajectories[t_idx][1]
-
-                    # Accumulate contribution. Multiple terms may map to the same target state.
-                    tensor[:, :, 0, target_state] += coeff * op_mat
-            else:
-                # Internal sites: deterministic transitions.
-                # Each row (current_id) in the tensor corresponds to a unique state from Step 2.
-                # This state maps to exactly one (op, next_id) pair.
-                map_i = bond_state_maps[i]
-
-                for (op_name, next_id), current_id in map_i.items():
-                    op_mat = paulis[op_name]
-                    tensor[:, :, current_id, next_id] = op_mat
-
-            self.tensors.append(tensor)
-
-        # 4. Final Compression
-        #    Compress shared prefixes left after suffix merging, within the
-        #    configured tolerance, rank cap, and sweep count.
-        self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
-        assert self.check_if_valid_mpo(), "MPO initialized wrong"
+    # Compression
 
     def compress(
         self,
@@ -1493,6 +1679,8 @@ class MPO:
 
             self.tensors[k] = left
             self.tensors[k + 1] = right
+
+    # Multiplication and addition
 
     @overload
     def multiply(
@@ -1665,6 +1853,92 @@ class MPO:
                 directions=directions,
             )
 
+    def __add__(self, other: MPO) -> MPO:
+        """Add two MPOs via direct bond stacking.
+
+        Args:
+            other: The other MPO to add. Must have identical length.
+
+        Returns:
+            A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
+
+        Raises:
+            ValueError: If the MPO lengths or physical dimensions do not match,
+                or a single-site MPO has non-unit boundary bonds.
+        """
+        if self.length != other.length:
+            msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
+            raise ValueError(msg)
+
+        new_mpo = MPO()
+        new_mpo.length = self.length
+        new_mpo.physical_dimension = copy.copy(self.physical_dimension)
+        new_tensors: list[np.ndarray] = []
+
+        length = self.length
+        if length == 1:
+            a = self.tensors[0]
+            b = other.tensors[0]
+            if a.shape[:2] != b.shape[:2]:
+                msg = f"Cannot add MPOs with mismatched physical dimensions: {a.shape[:2]} != {b.shape[:2]}"
+                raise ValueError(msg)
+            if a.shape[2:] != (1, 1) or b.shape[2:] != (1, 1):
+                msg = "Single-site MPOs must have unit boundary bonds before addition."
+                raise ValueError(msg)
+            new_tensors.append(np.asarray(a + b, dtype=np.complex128))
+        else:
+            for i in range(length):
+                a = self.tensors[i]
+                b = other.tensors[i]
+
+                p_out, p_in, la, ra = a.shape
+                _, _, lb, rb = b.shape
+
+                if i == 0:
+                    new_t = np.concatenate([a, b], axis=3)
+                elif i == length - 1:
+                    new_t = np.concatenate([a, b], axis=2)
+                else:
+                    new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
+                    new_t[:, :, :la, :ra] = a
+                    new_t[:, :, la:, ra:] = b
+
+                new_tensors.append(new_t)
+
+        new_mpo.tensors = new_tensors
+        return new_mpo
+
+    @classmethod
+    def mpo_sum(cls, mpos: list[MPO]) -> MPO:
+        """Efficient sequential addition of a batch of MPOs.
+
+        Args:
+            mpos: List of MPOs to sum.
+
+        Returns:
+            A new MPO directly representing the sum.
+
+        Raises:
+            ValueError: If ``mpos`` is empty.
+        """
+        if not mpos:
+            msg = "mpo_sum requires at least one MPO."
+            raise ValueError(msg)
+
+        if len(mpos) == 1:
+            m = cls()
+            m.length = mpos[0].length
+            m.physical_dimension = copy.copy(mpos[0].physical_dimension)
+            m.tensors = [t.copy() for t in mpos[0].tensors]
+            return m
+
+        res = mpos[0]
+        for other in mpos[1:]:
+            res += other
+        return res
+
+    # Rotation and reflection
+
     def rotate(self, *, conjugate: bool = False) -> None:
         """Rotates MPO.
 
@@ -1703,27 +1977,7 @@ class MPO:
         out.physical_dimension = reflected_tensors[0].shape[0]
         return out
 
-    def to_mps(self) -> MPS:
-        """MPO to MPS conversion.
-
-        Converts the current tensor network to a Matrix Product State (MPS) representation.
-        This method reshapes each tensor in the network from shape
-        (dim1, dim2, dim3, dim4) to (dim1 * dim2, dim3, dim4) and
-        returns a new MPS object with the converted tensors.
-
-        Returns:
-            An MPS containing the reshaped tensors and their product physical dimensions.
-        """
-        converted_tensors: list[NDArray[np.complex128]] = [
-            np.reshape(
-                tensor,
-                (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]),
-            )
-            for tensor in self.tensors
-        ]
-
-        physical_dimensions = [tensor.shape[0] * tensor.shape[1] for tensor in self.tensors]
-        return MPS(self.length, converted_tensors, physical_dimensions=physical_dimensions)
+    # Entanglement
 
     def _compute_bond_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
         """Return operator Schmidt singular values across a nearest-neighbor bond."""
@@ -1809,6 +2063,28 @@ class MPO:
         )
         return float(max(entropy, 0.0))
 
+    # Validation and identity diagnostics
+
+    def check_if_valid_mpo(self) -> bool:
+        """MPO validity check.
+
+        Check if the current tensor network is a valid Matrix Product Operator (MPO).
+        This method verifies the tensor count, rank, finite values, physical dimensions,
+        open boundary bonds, adjacent bonds, and site-0 dimension metadata.
+
+        Returns:
+            bool: True if the tensor network is a valid MPO, False otherwise.
+        """
+        try:
+            _validate_mpo_tensors(
+                self.tensors,
+                expected_length=self.length,
+                physical_dimension=self.physical_dimension,
+            )
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return True
+
     def compute_identity_fidelity(self) -> float:
         """Compute normalized overlap of this MPO with the identity operator.
 
@@ -1826,6 +2102,44 @@ class MPO:
         trace = mps.scalar_product(identity_mps)
         hilbert_dim = int(np.prod(local_dims, dtype=np.int64))
         return float(np.abs(trace) / hilbert_dim)
+
+    def check_if_identity(self, fidelity: float) -> bool:
+        """MPO Identity check.
+
+        Check if the current MPO (Matrix Product Operator) represents an identity operation
+        within a given fidelity threshold.
+
+        Args:
+            fidelity (float): The fidelity threshold to determine if the MPO is an identity.
+
+        Returns:
+            bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
+        """
+        return self.compute_identity_fidelity() >= fidelity
+
+    # Conversions
+
+    def to_mps(self) -> MPS:
+        """MPO to MPS conversion.
+
+        Converts the current tensor network to a Matrix Product State (MPS) representation.
+        This method reshapes each tensor in the network from shape
+        (dim1, dim2, dim3, dim4) to (dim1 * dim2, dim3, dim4) and
+        returns a new MPS object with the converted tensors.
+
+        Returns:
+            An MPS containing the reshaped tensors and their product physical dimensions.
+        """
+        converted_tensors: list[NDArray[np.complex128]] = [
+            np.reshape(
+                tensor,
+                (tensor.shape[0] * tensor.shape[1], tensor.shape[2], tensor.shape[3]),
+            )
+            for tensor in self.tensors
+        ]
+
+        physical_dimensions = [tensor.shape[0] * tensor.shape[1] for tensor in self.tensors]
+        return MPS(self.length, converted_tensors, physical_dimensions=physical_dimensions)
 
     def _to_matrix_site0_msb(self) -> NDArray[np.complex128]:
         """Contract to the internal tensor-chain matrix order.
@@ -1934,297 +2248,3 @@ class MPO:
             return scipy.sparse.csr_matrix((dim, dim), dtype=complex)
 
         return current_operators[0]
-
-    @classmethod
-    def from_matrix(
-        cls,
-        mat: np.ndarray,
-        d: int,
-        max_bond: int | None = None,
-        cutoff: float = 1e-12,
-    ) -> MPO:
-        """Factorize a dense matrix into an MPO with uniform local dimension ``d``.
-
-        Each site has local shape ``(d, d)``.
-        The number of sites ``n`` is inferred from the relation:
-
-            mat.shape = (d**n, d**n)
-
-        The input uses the public dense order: site ``0`` is the
-        least-significant, fastest-varying subsystem. This method is the inverse
-        of :meth:`to_matrix` when no singular values are truncated.
-
-        Args:
-            mat (np.ndarray):
-                Square matrix of shape ``(d**n, d**n)`` in site-0-LSB order.
-            d (int):
-                Physical dimension per site. Must satisfy ``d > 0``.
-            max_bond (int | None):
-                Maximum allowed bond dimension (before truncation).
-            cutoff (float):
-                Singular values ``<= cutoff`` are discarded. By default cutoff=1e-12: all numerically non-zero
-                singular values are included.
-
-        Returns:
-            MPO:
-                An MPO with ``n`` sites, uniform physical dimension ``d`` per site,
-                and bond dimensions determined by SVD truncation.
-
-        Raises:
-            ValueError:
-                If ``d <= 0``;
-                If ``d == 1`` but the matrix is not ``1 x 1``;
-                If the matrix is not square;
-                If ``rows`` is not a power of ``d``;
-                If the inferred number of sites ``n < 1``.
-        """
-        if d <= 0:
-            msg = f"Physical dimension d must be > 0, got d={d}."
-            raise ValueError(msg)
-
-        if np.ndim(mat) != 2:
-            msg = "Matrix must be a 2-D array for uniform MPO factorization."
-            raise ValueError(msg)
-
-        rows, cols = mat.shape
-
-        if rows != cols:
-            msg = "Matrix must be square for uniform MPO factorization."
-            raise ValueError(msg)
-
-        if d == 1:
-            if rows != 1:
-                msg = "For d == 1 the matrix must be 1x1 since 1**n = 1 for any n."
-                raise ValueError(msg)
-            n = 1
-        else:
-            n_float = np.log(rows) / np.log(d)
-            n = round(n_float)
-
-            if n < 1:
-                msg = f"Inferred chain length n={n} is invalid; matrix dimension {rows} too small for base d={d}."
-                raise ValueError(msg)
-
-            if not np.isclose(n_float, n):
-                msg = f"Matrix dimension {rows} is not a power of d={d}."
-                raise ValueError(msg)
-
-        mat = np.asarray(mat, dtype=np.complex128)
-
-        left_rank = 1
-        rem = mat.reshape(1, rows, cols)
-
-        tensors: list[np.ndarray] = []
-
-        def _truncate(s: np.ndarray) -> int:
-            if cutoff <= 0.0:
-                r = int(s.size)
-                if max_bond is not None:
-                    r = min(r, max_bond)
-                return r
-            return linalg.truncate(
-                s,
-                mode="hard_cutoff",
-                threshold=cutoff,
-                max_bond_dim=max_bond,
-                min_keep=1,
-            )
-
-        for k in range(n - 1):
-            rest = d ** (n - k - 1)
-
-            rem = rem.reshape(left_rank, d, rest, d, rest)
-            rem_perm = np.transpose(rem, (1, 3, 0, 2, 4))
-            x = rem_perm.reshape(d * d * left_rank, rest * rest)
-
-            u, s, vh = linalg.svd(x, full_matrices=False)
-
-            r_keep = _truncate(s)
-
-            u = u[:, :r_keep]
-            s = s[:r_keep]
-            vh = vh[:r_keep, :]
-
-            t_k = u.reshape(d, d, left_rank, r_keep)
-            tensors.append(t_k)
-
-            rem = (s[:, None] * vh).reshape(r_keep, rest, rest)
-            left_rank = r_keep
-
-        rem = rem.reshape(left_rank, d, d)
-        t_last = np.transpose(rem, (1, 2, 0)).reshape(d, d, left_rank, 1)
-        tensors.append(t_last)
-
-        mpo = cls()
-        mpo.tensors = tensors
-        mpo.length = n
-        mpo.physical_dimension = d
-
-        assert mpo.check_if_valid_mpo(), "MPO initialized wrong"
-
-        return mpo.reflected()
-
-    def __add__(self, other: MPO) -> MPO:
-        """Add two MPOs via direct bond stacking.
-
-        Args:
-            other: The other MPO to add. Must have identical length.
-
-        Returns:
-            A new MPO representing self + other, with bond dimension roughly chi_a + chi_b.
-
-        Raises:
-            ValueError: If the MPO lengths or physical dimensions do not match,
-                or a single-site MPO has non-unit boundary bonds.
-        """
-        if self.length != other.length:
-            msg = f"Cannot add MPOs of mismatched lengths: {self.length} != {other.length}"
-            raise ValueError(msg)
-
-        new_mpo = MPO()
-        new_mpo.length = self.length
-        new_mpo.physical_dimension = copy.copy(self.physical_dimension)
-        new_tensors: list[np.ndarray] = []
-
-        length = self.length
-        if length == 1:
-            a = self.tensors[0]
-            b = other.tensors[0]
-            if a.shape[:2] != b.shape[:2]:
-                msg = f"Cannot add MPOs with mismatched physical dimensions: {a.shape[:2]} != {b.shape[:2]}"
-                raise ValueError(msg)
-            if a.shape[2:] != (1, 1) or b.shape[2:] != (1, 1):
-                msg = "Single-site MPOs must have unit boundary bonds before addition."
-                raise ValueError(msg)
-            new_tensors.append(np.asarray(a + b, dtype=np.complex128))
-        else:
-            for i in range(length):
-                a = self.tensors[i]
-                b = other.tensors[i]
-
-                p_out, p_in, la, ra = a.shape
-                _, _, lb, rb = b.shape
-
-                if i == 0:
-                    new_t = np.concatenate([a, b], axis=3)
-                elif i == length - 1:
-                    new_t = np.concatenate([a, b], axis=2)
-                else:
-                    new_t = np.zeros((p_out, p_in, la + lb, ra + rb), dtype=np.complex128)
-                    new_t[:, :, :la, :ra] = a
-                    new_t[:, :, la:, ra:] = b
-
-                new_tensors.append(new_t)
-
-        new_mpo.tensors = new_tensors
-        return new_mpo
-
-    @classmethod
-    def mpo_sum(cls, mpos: list[MPO]) -> MPO:
-        """Efficient sequential addition of a batch of MPOs.
-
-        Args:
-            mpos: List of MPOs to sum.
-
-        Returns:
-            A new MPO directly representing the sum.
-
-        Raises:
-            ValueError: If ``mpos`` is empty.
-        """
-        if not mpos:
-            msg = "mpo_sum requires at least one MPO."
-            raise ValueError(msg)
-
-        if len(mpos) == 1:
-            m = cls()
-            m.length = mpos[0].length
-            m.physical_dimension = copy.copy(mpos[0].physical_dimension)
-            m.tensors = [t.copy() for t in mpos[0].tensors]
-            return m
-
-        res = mpos[0]
-        for other in mpos[1:]:
-            res += other
-        return res
-
-    def check_if_valid_mpo(self) -> bool:
-        """MPO validity check.
-
-        Check if the current tensor network is a valid Matrix Product Operator (MPO).
-        This method verifies the tensor count, rank, finite values, physical dimensions,
-        open boundary bonds, adjacent bonds, and site-0 dimension metadata.
-
-        Returns:
-            bool: True if the tensor network is a valid MPO, False otherwise.
-        """
-        try:
-            _validate_mpo_tensors(
-                self.tensors,
-                expected_length=self.length,
-                physical_dimension=self.physical_dimension,
-            )
-        except (AttributeError, TypeError, ValueError):
-            return False
-        return True
-
-    @property
-    def physical_dimensions(self) -> tuple[int, ...]:
-        """Local physical dimension derived from each site tensor."""
-        return tuple(int(tensor.shape[0]) for tensor in self.tensors)
-
-    def check_if_identity(self, fidelity: float) -> bool:
-        """MPO Identity check.
-
-        Check if the current MPO (Matrix Product Operator) represents an identity operation
-        within a given fidelity threshold.
-
-        Args:
-            fidelity (float): The fidelity threshold to determine if the MPO is an identity.
-
-        Returns:
-            bool: True if the MPO is considered an identity within the given fidelity, False otherwise.
-        """
-        return self.compute_identity_fidelity() >= fidelity
-
-    @classmethod
-    def _parse_pauli_string(cls, spec: str) -> dict[int, str]:
-        """Parse a Pauli-string specification into a site-to-operator mapping.
-
-        Converts a compact string representation of a Pauli operator product
-        into a dictionary mapping site indices to Pauli labels.
-
-        The expected format is a whitespace- or comma-separated list of tokens:
-            "X0 Y2 Z5"
-
-        Args:
-            spec: Pauli-string specification.
-
-        Returns:
-            dict[int, str]: Mapping from site index to Pauli label
-            ('I', 'X', 'Y', or 'Z'). An empty dictionary corresponds to the
-            identity operator.
-
-        Raises:
-            ValueError: If:
-                - a site index appears more than once,
-                - an invalid token is encountered,
-                - or the specification contains malformed entries.
-
-        """
-        s = spec.replace(",", " ").strip()
-        if not s:
-            return {}
-        out: dict[int, str] = {}
-        for op, idx in cls._PAULI_TOKEN_RE.findall(s):
-            site = int(idx)
-            op_up = op.upper()
-            if site in out:
-                msg = f"Duplicate site {site} in spec '{spec}'."
-                raise ValueError(msg)
-            out[site] = op_up
-        cleaned = cls._PAULI_TOKEN_RE.sub("", s)
-        if cleaned.split():
-            msg = f"Invalid token(s) in spec '{spec}'. Use forms like 'X0 Y2 Z5'."
-            raise ValueError(msg)
-        return out

@@ -46,6 +46,42 @@ def _write_configuration(source: Path, extensions: list[str], extra: str = "") -
     )
 
 
+def test_documentation_ci_uses_executed_outputs() -> None:
+    """The documentation check consumes outputs from this run's example execution."""
+    yaml = pytest.importorskip("yaml")
+    workflow = Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
+    jobs = yaml.safe_load(workflow.read_text())["jobs"]
+    check = jobs["docs-check"]
+    dependencies = check["needs"]
+    if isinstance(dependencies, str):
+        dependencies = [dependencies]
+    assert "docs-execute" in dependencies
+
+    upload = next(
+        step
+        for step in jobs["docs-execute"]["steps"]
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+        and "docs/_outputs" in step["with"]["path"].splitlines()
+    )
+    steps = check["steps"]
+    download_index, download = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/download-artifact@")
+        and step["with"]["name"] == upload["with"]["name"]
+    )
+    check_index = next(index for index, step in enumerate(steps) if "-s docs-check" in step.get("run", ""))
+    assert download_index < check_index
+    assert not download.get("continue-on-error", False)
+    assert download["with"].get("run-id", "${{ github.run_id }}") == "${{ github.run_id }}"
+    assert download["with"].get("repository", "${{ github.repository }}") == "${{ github.repository }}"
+    paths = upload["with"]["path"].splitlines()
+    output = Path("docs/_outputs")
+    assert output.as_posix() in paths
+    artifact_root = Path(os.path.commonpath(paths))
+    assert Path(download["with"]["path"]) / output.relative_to(artifact_root) == output
+
+
 @pytest.mark.parametrize("missing_source", [False, True])
 def test_included_release_links(tmp_path: Path, *, missing_source: bool) -> None:
     """Included release notes link to source and guides without changing the originals."""
@@ -229,22 +265,43 @@ def test_html_and_markdown_share_notebook_execution(tmp_path: Path) -> None:
             path.unlink()
         else:
             path.write_text(replacement)
-        rejected = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
-            [sys.executable, "-m", "sphinx", "-E", "-W", "-b", "html", str(source), str(output)],
-            cwd=tmp_path,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        assert rejected.returncode != 0, str(path)
-        assert message in rejected.stdout + rejected.stderr
-        assert len(records.read_text().splitlines()) == 1
+        commands = [[sys.executable, "-m", "sphinx", "-E", "-W", "-b", "html", str(source), str(output)]]
+        if message != "package code or dependencies":
+            commands.append([Template(argument).substitute(environment) for argument in shlex.split(command)])
+        for build_command in commands:
+            rejected = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+                build_command,
+                cwd=tmp_path,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert rejected.returncode != 0, str(path)
+            assert message in rejected.stdout + rejected.stderr
+            assert len(records.read_text().splitlines()) == 1
         if previous is None:
             path.unlink()
         else:
             path.write_text(previous)
+
+    # RTD can publish intact snapshots while CI checks the current runtime.
+    package.write_text("changed = True\n")
+    (tmp_path / "uv.lock").write_text("changed dependencies\n")
+    published = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - sys.executable is trusted.
+        [Template(argument).substitute(environment) for argument in shlex.split(command)],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert published.returncode == 0, published.stdout + published.stderr
+    assert "different package or dependency revision" in published.stdout
+    assert "NOTEBOOK_RESULT_42" in (output / "index.html").read_text()
+    assert len(records.read_text().splitlines()) == 1
 
 
 @pytest.mark.parametrize("missing_reference", [False, True])

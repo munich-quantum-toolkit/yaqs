@@ -628,11 +628,12 @@ def test_unknown_distribution_key_rejected() -> None:
         ])
 
 
-def test_get_operator_returns_copy() -> None:
+@pytest.mark.parametrize("name", ["pauli_x", "x", "crosstalk_xy", "longrange_crosstalk_xy"])
+def test_get_operator_returns_copy(name: str) -> None:
     """Library operator lookups return owned copies."""
-    op = NoiseModel.get_operator("pauli_x")
+    op = NoiseModel.get_operator(name)
     op[0, 0] = 99.0
-    op2 = NoiseModel.get_operator("pauli_x")
+    op2 = NoiseModel.get_operator(name)
     assert op2[0, 0] == pytest.approx(0.0)
 
 

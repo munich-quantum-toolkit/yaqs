@@ -233,14 +233,6 @@ class State:
 
         self._encode(self.representation)
 
-    def ensure_encoded(self, representation: Representation | None = None) -> State:
-        """Materialize ``representation`` if needed (used by :meth:`~mqt.yaqs.Simulator.run`).
-
-        Returns:
-            ``self`` for chaining.
-        """
-        return self._encode(representation)
-
     @classmethod
     def from_mps(cls, mps: MPS) -> State:
         """Wrap an existing :class:`MPS` as a :class:`State` (already in MPS form).
@@ -250,6 +242,50 @@ class State:
         """
         mps.check_if_valid_mps()
         return cls._from_trusted_mps(mps)
+
+    @property
+    def mps(self) -> MPS:
+        """MPS when ``representation`` is ``"mps"``.
+
+        Raises:
+            RuntimeError: If the state is not encoded as ``"mps"``.
+        """
+        if self._encoded_as != "mps" or self._mps is None:
+            msg = f"MPS is not available for representation={self.representation!r}."
+            raise RuntimeError(msg)
+        return self._mps
+
+    @property
+    def vector(self) -> NDArray[np.complex128]:
+        """Dense site-0-LSB state vector for ``representation="vector"``.
+
+        Raises:
+            RuntimeError: If the state is not encoded as ``"vector"``.
+        """
+        if self._encoded_as != "vector" or self._vector is None:
+            msg = f"State vector is not available for representation={self.representation!r}."
+            raise RuntimeError(msg)
+        return self._vector
+
+    @property
+    def density_matrix(self) -> NDArray[np.complex128]:
+        """Site-0-LSB density matrix for ``representation="density_matrix"``.
+
+        Raises:
+            RuntimeError: If the state is not encoded as ``"density_matrix"``.
+        """
+        if self._encoded_as != "density_matrix" or self._density_matrix is None:
+            msg = f"Density matrix is not available for representation={self.representation!r}."
+            raise RuntimeError(msg)
+        return self._density_matrix
+
+    def ensure_encoded(self, representation: Representation | None = None) -> State:
+        """Materialize ``representation`` if needed (used by :meth:`~mqt.yaqs.Simulator.run`).
+
+        Returns:
+            ``self`` for chaining.
+        """
+        return self._encode(representation)
 
     @classmethod
     def _from_trusted_mps(cls, mps: MPS) -> State:
@@ -328,42 +364,6 @@ class State:
             basis_string=self.basis_string,
             seed=self.seed,
         )
-
-    @property
-    def mps(self) -> MPS:
-        """MPS when ``representation`` is ``"mps"``.
-
-        Raises:
-            RuntimeError: If the state is not encoded as ``"mps"``.
-        """
-        if self._encoded_as != "mps" or self._mps is None:
-            msg = f"MPS is not available for representation={self.representation!r}."
-            raise RuntimeError(msg)
-        return self._mps
-
-    @property
-    def vector(self) -> NDArray[np.complex128]:
-        """Dense site-0-LSB state vector for ``representation="vector"``.
-
-        Raises:
-            RuntimeError: If the state is not encoded as ``"vector"``.
-        """
-        if self._encoded_as != "vector" or self._vector is None:
-            msg = f"State vector is not available for representation={self.representation!r}."
-            raise RuntimeError(msg)
-        return self._vector
-
-    @property
-    def density_matrix(self) -> NDArray[np.complex128]:
-        """Site-0-LSB density matrix for ``representation="density_matrix"``.
-
-        Raises:
-            RuntimeError: If the state is not encoded as ``"density_matrix"``.
-        """
-        if self._encoded_as != "density_matrix" or self._density_matrix is None:
-            msg = f"Density matrix is not available for representation={self.representation!r}."
-            raise RuntimeError(msg)
-        return self._density_matrix
 
     def _encode(self, representation: Representation | None = None) -> State:
         r"""Materialize internal storage for the requested representation (used by ``run``).

@@ -608,6 +608,8 @@ def compute_temporal_entropy(
 class DenseProcessTensor:
     """Wrapper around a dense process-tensor Choi operator Upsilon."""
 
+    # Construction and validation
+
     def __init__(
         self,
         upsilon: NDArray[np.complex128],
@@ -681,6 +683,8 @@ class DenseProcessTensor:
         """
         validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
+    # Conversions
+
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return the underlying dense process-tensor matrix.
 
@@ -688,6 +692,8 @@ class DenseProcessTensor:
             Dense process-tensor matrix.
         """
         return self.upsilon
+
+    # Prediction and probe evaluation
 
     def _num_interventions(self) -> int:
         """Infer number of intervention steps from the process-tensor matrix shape.
@@ -697,31 +703,6 @@ class DenseProcessTensor:
             ``(2*4**num_interventions, 2*4**num_interventions)``.
         """
         return self._num_intervention_steps
-
-    def compute_temporal_entropy(
-        self,
-        cut: int,
-        *,
-        rtol: float = 1e-12,
-        weight_tol: float = 1e-30,
-    ) -> dict[str, NDArray[np.float64] | float | int]:
-        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
-
-        Args:
-            cut: Causal cut index ``c`` matching the response protocol.
-            rtol: Relative Schmidt threshold for ``schmidt_rank``.
-            weight_tol: Absolute floor on ``sum(s**2)``.
-
-        Returns:
-            Result dictionary from :func:`compute_temporal_entropy`.
-        """
-        return compute_temporal_entropy(
-            self.upsilon,
-            self._num_interventions(),
-            cut,
-            rtol=rtol,
-            weight_tol=weight_tol,
-        )
 
     def _contract_subnormalized_branch(
         self,
@@ -796,6 +777,33 @@ class DenseProcessTensor:
             Tuple ``(pauli_ixyz_ij, weights_ij)`` derived from subnormalized outcome branches.
         """
         return _evaluate_probes_with_weights(self._contract_subnormalized_branch, probe_set)
+
+    # Information metrics
+
+    def compute_temporal_entropy(
+        self,
+        cut: int,
+        *,
+        rtol: float = 1e-12,
+        weight_tol: float = 1e-30,
+    ) -> dict[str, NDArray[np.float64] | float | int]:
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
+
+        Args:
+            cut: Causal cut index ``c`` matching the response protocol.
+            rtol: Relative Schmidt threshold for ``schmidt_rank``.
+            weight_tol: Absolute floor on ``sum(s**2)``.
+
+        Returns:
+            Result dictionary from :func:`compute_temporal_entropy`.
+        """
+        return compute_temporal_entropy(
+            self.upsilon,
+            self._num_interventions(),
+            cut,
+            rtol=rtol,
+            weight_tol=weight_tol,
+        )
 
     def qmi(
         self,
@@ -887,6 +895,8 @@ class DenseProcessTensor:
 
 class MPOProcessTensor(MPO):
     """Wrapper around an MPO representation of a process-tensor Choi operator Upsilon."""
+
+    # Construction and validation
 
     def __init__(
         self,
@@ -981,6 +991,8 @@ class MPOProcessTensor(MPO):
         """
         validate_initial_rho(rho0, self.initial_rho, atol=atol)
 
+    # Conversions
+
     def to_matrix(self) -> NDArray[np.complex128]:
         """Return the dense matrix in process-tensor causal-leg order.
 
@@ -1013,60 +1025,7 @@ class MPOProcessTensor(MPO):
         """
         return DenseProcessTensor(self.to_matrix(), self.timesteps, initial_rho=self.initial_rho.copy())
 
-    def _num_interventions_for_probe(self) -> int:
-        return int(self.length) - 1
-
-    def compute_temporal_entropy(
-        self,
-        cut: int,
-        *,
-        rtol: float = 1e-12,
-        weight_tol: float = 1e-30,
-    ) -> dict[str, NDArray[np.float64] | float | int]:
-        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
-
-        This method densifies the complete MPO before the operator-Schmidt
-        decomposition. For ``k`` intervention legs, the dense complex matrix
-        uses ``64 * 16**k`` bytes before decomposition workspace. Restrict this
-        method to about five intervention legs on a typical workstation. At six
-        legs, the matrix alone uses 1 GiB.
-
-        Args:
-            cut: Causal cut index ``c`` matching the response protocol.
-            rtol: Relative Schmidt threshold for ``schmidt_rank``.
-            weight_tol: Absolute floor on ``sum(s**2)``.
-
-        Returns:
-            Result dictionary from :func:`compute_temporal_entropy`.
-        """
-        return self.to_dense().compute_temporal_entropy(cut, rtol=rtol, weight_tol=weight_tol)
-
-    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
-        """Evaluate split-cut probe Pauli responses for V-matrix assembly.
-
-        Uses :meth:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor.predict`
-        without densifying the process tensor.
-
-        Args:
-            probe_set: Sampled split-cut probes.
-
-        Returns:
-            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
-        """
-        return evaluate_probes(self, probe_set)
-
-    def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate normalized final system responses with joint retained-outcome probabilities.
-
-        Uses native MPO contractions and does not densify the process tensor.
-
-        Args:
-            probe_set: Sampled split-cut probes.
-
-        Returns:
-            Tuple ``(pauli_ixyz_ij, weights_ij)`` derived from subnormalized outcome branches.
-        """
-        return _evaluate_probes_with_weights(self._contract_subnormalized_branch, probe_set)
+    # Prediction and probe evaluation
 
     def _contract_subnormalized_branch(
         self,
@@ -1120,6 +1079,63 @@ class MPOProcessTensor(MPO):
 
         """
         return _normalize_prediction(self._contract_subnormalized_branch(interventions))
+
+    def _num_interventions_for_probe(self) -> int:
+        return int(self.length) - 1
+
+    def evaluate_probes(self, probe_set: ProbeSet) -> np.ndarray:
+        """Evaluate split-cut probe Pauli responses for V-matrix assembly.
+
+        Uses :meth:`~mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor.predict`
+        without densifying the process tensor.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Array of shape ``(n_pasts, n_futures, 4)`` with Pauli tomography coefficients.
+        """
+        return evaluate_probes(self, probe_set)
+
+    def evaluate_probes_with_weights(self, probe_set: ProbeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate normalized final system responses with joint retained-outcome probabilities.
+
+        Uses native MPO contractions and does not densify the process tensor.
+
+        Args:
+            probe_set: Sampled split-cut probes.
+
+        Returns:
+            Tuple ``(pauli_ixyz_ij, weights_ij)`` derived from subnormalized outcome branches.
+        """
+        return _evaluate_probes_with_weights(self._contract_subnormalized_branch, probe_set)
+
+    # Information metrics
+
+    def compute_temporal_entropy(
+        self,
+        cut: int,
+        *,
+        rtol: float = 1e-12,
+        weight_tol: float = 1e-30,
+    ) -> dict[str, NDArray[np.float64] | float | int]:
+        """Compute temporal entanglement :math:`S_{PT}(c)` at ``cut``.
+
+        This method densifies the complete MPO before the operator-Schmidt
+        decomposition. For ``k`` intervention legs, the dense complex matrix
+        uses ``64 * 16**k`` bytes before decomposition workspace. Restrict this
+        method to about five intervention legs on a typical workstation. At six
+        legs, the matrix alone uses 1 GiB.
+
+        Args:
+            cut: Causal cut index ``c`` matching the response protocol.
+            rtol: Relative Schmidt threshold for ``schmidt_rank``.
+            weight_tol: Absolute floor on ``sum(s**2)``.
+
+        Returns:
+            Result dictionary from :func:`compute_temporal_entropy`.
+        """
+        return self.to_dense().compute_temporal_entropy(cut, rtol=rtol, weight_tol=weight_tol)
 
     def qmi(
         self,

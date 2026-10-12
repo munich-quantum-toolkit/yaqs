@@ -81,6 +81,8 @@ class MPS:
             tracking; call ``set_center(None)`` or use MPS mutators.
     """
 
+    # Construction and bond layout
+
     def __init__(
         self,
         length: int,
@@ -337,212 +339,6 @@ class MPS:
         window.set_center(None)
         return window
 
-    @property
-    def orthogonality_center(self) -> int | None:
-        """Site index of the mixed-canonical center, or ``None`` if the gauge is unknown."""
-        return self._orthogonality_center
-
-    def _validate_center(self, center: int, *, name: str = "center") -> int:
-        """Validate a site used as an orthogonality center.
-
-        Args:
-            center: Site index to validate.
-            name: Argument name used in the error message.
-
-        Returns:
-            The validated site as a Python integer.
-
-        Raises:
-            ValueError: If ``center`` is outside this MPS.
-        """
-        if not isinstance(center, Integral) or isinstance(center, bool) or not 0 <= center < self.length:
-            msg = f"{name} must be in [0, {self.length - 1}], got {center!r}."
-            raise ValueError(msg)
-        return int(center)
-
-    def _validate_bond_sites(self, sites: object, *, name: str) -> tuple[int, int]:
-        """Validate an ordered nearest-neighbor bond.
-
-        Args:
-            sites: Candidate pair of site indices.
-            name: Quantity that uses the bond, for error messages.
-
-        Returns:
-            The validated pair as Python integers.
-
-        Raises:
-            TypeError: If ``sites`` is not a list of integers.
-            ValueError: If ``sites`` does not contain two ordered, adjacent, in-range indices.
-        """
-        if not isinstance(sites, list) or any(
-            isinstance(site, bool) or not isinstance(site, Integral) for site in sites
-        ):
-            msg = f"{name} sites must be a list of integers."
-            raise TypeError(msg)
-        if len(sites) != 2:
-            msg = f"{name} requires exactly two sites, got {sites!r}."
-            raise ValueError(msg)
-        i, j = (int(site) for site in sites)
-        if not 0 <= i < self.length or not 0 <= j < self.length:
-            msg = f"{name} sites must be in [0, {self.length - 1}], got {sites!r}."
-            raise ValueError(msg)
-        if j != i + 1:
-            msg = f"{name} sites must be ordered nearest neighbors, got {sites!r}."
-            raise ValueError(msg)
-        return i, j
-
-    def _validate_observable_sites(self, sites: object) -> list[int]:
-        """Validate one or two observable sites.
-
-        Args:
-            sites: One site or a list of one or two sites.
-
-        Returns:
-            Validated site indices as Python integers.
-
-        Raises:
-            TypeError: If a site or the site container has an invalid type.
-            ValueError: If the number of sites or a site index is invalid.
-        """
-        if isinstance(sites, Integral) and not isinstance(sites, bool):
-            site_values = [sites]
-        elif isinstance(sites, list):
-            site_values = sites
-        else:
-            msg = "observable sites must be an integer or a list of integers."
-            raise TypeError(msg)
-        if not 1 <= len(site_values) <= 2:
-            msg = f"observable must act on one or two sites, got {site_values!r}."
-            raise ValueError(msg)
-        if any(isinstance(site, bool) or not isinstance(site, Integral) for site in site_values):
-            msg = "observable sites must contain only integers."
-            raise TypeError(msg)
-        resolved_sites = [int(site) for site in site_values]
-        for site in resolved_sites:
-            if not 0 <= site < self.length:
-                msg = f"observable site must be in [0, {self.length - 1}], got {site}."
-                raise ValueError(msg)
-        return resolved_sites
-
-    @staticmethod
-    def _validate_decomposition(decomposition: str) -> None:
-        """Validate a canonicalization decomposition name.
-
-        Args:
-            decomposition: Decomposition name to validate.
-
-        Raises:
-            ValueError: If ``decomposition`` is neither ``"QR"`` nor ``"SVD"``.
-        """
-        if decomposition not in {"QR", "SVD"}:
-            msg = f"decomposition must be 'QR' or 'SVD', got {decomposition!r}."
-            raise ValueError(msg)
-
-    def set_center(self, center: int | None) -> None:
-        """Set the tracked orthogonality center without re-canonicalizing.
-
-        Args:
-            center: Mixed-canonical center site index, or ``None`` if the gauge is unknown.
-        """
-        if center is not None:
-            center = self._validate_center(center)
-        self._orthogonality_center = center
-
-    def update_center_after_split(self, left_site: int, right_site: int, svd_distribution: str) -> None:
-        """Update the tracked center after a two-site SVD split.
-
-        Call immediately after ``split_two_site`` or ``split_tdvp`` assigns new bond
-        tensors.
-
-        Args:
-            left_site: Left site index of the split pair.
-            right_site: Right site index of the split pair.
-            svd_distribution: ``"left"``, ``"right"``, or ``"sqrt"``.
-
-        Raises:
-            ValueError: If the sites are not an in-range adjacent pair or the
-                distribution is not ``"left"``, ``"right"``, or ``"sqrt"``.
-
-        Notes:
-            A left or right distribution moves a center that already covered the
-            split pair. If the prior center did not cover the pair, or the singular
-            values were split with ``"sqrt"``, the gauge remains unknown.
-        """
-        left_site = self._validate_center(left_site, name="left_site")
-        right_site = self._validate_center(right_site, name="right_site")
-        if right_site != left_site + 1:
-            msg = f"Split sites must be adjacent and ordered, got ({left_site}, {right_site})."
-            raise ValueError(msg)
-        if svd_distribution not in {"left", "right", "sqrt"}:
-            msg = f"svd_distribution must be 'left', 'right', or 'sqrt', got {svd_distribution!r}."
-            raise ValueError(msg)
-
-        if self._orthogonality_center not in {left_site, right_site} or svd_distribution == "sqrt":
-            self._orthogonality_center = None
-        elif svd_distribution == "right":
-            self._orthogonality_center = right_site
-        else:
-            self._orthogonality_center = left_site
-
-    def assert_center(self, expected: int, *, context: str) -> None:
-        """Raise if the tracked center is unknown or not ``expected``.
-
-        Args:
-            expected: Required center site index.
-            context: Description of the calling algorithm for error messages.
-
-        Raises:
-            ValueError: If the gauge is unknown or the center does not match.
-        """
-        if self._orthogonality_center is None:
-            msg = f"{context}: MPS gauge unknown (orthogonality_center is None), expected site {expected}."
-            raise ValueError(msg)
-        if self._orthogonality_center != expected:
-            msg = f"{context}: orthogonality center at site {self._orthogonality_center}, expected site {expected}."
-            raise ValueError(msg)
-
-    def check_covers_sites(self, sites: int | list[int]) -> bool:
-        """Check whether the tracked center supports local contraction at ``sites``.
-
-        Args:
-            sites: One site index or a nearest-neighbor two-site pair.
-
-        Returns:
-            True if the tracked center covers the observable site(s).
-        """
-        if self._orthogonality_center is None:
-            return False
-        sites_list = [sites] if isinstance(sites, int) else list(sites)
-        if len(sites_list) == 1:
-            return self._orthogonality_center == sites_list[0]
-        if len(sites_list) == 2:
-            i, j = sites_list
-            return abs(j - i) == 1 and self._orthogonality_center in {i, j}
-        return False
-
-    def shift_center_to(self, target: int, decomposition: str = "QR") -> None:
-        """Shift the orthogonality center to ``target`` via incremental moves.
-
-        Args:
-            target: Desired orthogonality center site index.
-            decomposition: QR or SVD decomposition for each shift step.
-
-        Raises:
-            ValueError: If the target or decomposition is invalid, or the gauge is unknown.
-        """
-        target = self._validate_center(target, name="target")
-        self._validate_decomposition(decomposition)
-        if self._orthogonality_center is None:
-            msg = "Cannot shift orthogonality center when gauge is unknown."
-            raise ValueError(msg)
-        current = self._orthogonality_center
-        while current < target:
-            self.shift_orthogonality_center_right(current, decomposition)
-            current += 1
-        while current > target:
-            self.shift_orthogonality_center_left(current, decomposition)
-            current -= 1
-
     def init_mps_from_basis(self, basis_string: str, physical_dimensions: list[int]) -> None:
         """Initialize this MPS in place as a product state from a basis string.
 
@@ -768,107 +564,126 @@ class MPS:
         bonds = [tensor.shape[1] for tensor in self.tensors[1:]]
         return sum(bonds)
 
-    def get_cost(self) -> int:
-        """Estimate contraction cost from the internal bonds.
+    # Canonical form and normalization
 
-        Returns:
-            Sum of cubed internal bond dimensions, a contraction-cost heuristic.
-        """
-        cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
-        return sum(cost)
+    @property
+    def orthogonality_center(self) -> int | None:
+        """Site index of the mixed-canonical center, or ``None`` if the gauge is unknown."""
+        return self._orthogonality_center
 
-    def record_diagnostics(self, diagnostics: NDArray[np.float64], column_index: int) -> None:
-        """Write runtime cost, max bond, and total bond into a diagnostics row buffer.
+    def _validate_center(self, center: int, *, name: str = "center") -> int:
+        """Validate a site used as an orthogonality center.
 
         Args:
-            diagnostics: Array shaped ``(3, T)``; rows are cost, max bond, total bond.
-            column_index: Column (time or layer index) to fill.
-        """
-        diagnostics[0, column_index] = self.get_cost()
-        diagnostics[1, column_index] = self.get_max_bond()
-        diagnostics[2, column_index] = self.get_total_bond()
-
-    def _bond_matrix(self, i: int, j: int) -> NDArray[np.complex128]:
-        """Two-site matrix at the cut ``(i, j)``, gauged so its singular values are Schmidt values.
-
-        The singular values of ``tensors[i] tensors[j]`` are the Schmidt coefficients of the
-        cut only in a mixed-canonical gauge with the center on the pair; the center is moved
-        onto the pair on a copy when it is not already there.
-
-        Args:
-            i: Left site of the nearest-neighbor cut.
-            j: Right site of the cut, ``i + 1``.
+            center: Site index to validate.
+            name: Argument name used in the error message.
 
         Returns:
-            The two-site matrix reshaped to ``(d_i * chi_left, d_j * chi_right)``.
+            The validated site as a Python integer.
+
+        Raises:
+            ValueError: If ``center`` is outside this MPS.
         """
-        state = self
-        if not self.check_covers_sites([i, j]):
-            state = copy.deepcopy(self)
-            if state.orthogonality_center is None:
-                state.set_canonical_form(i)
-            else:
-                state.shift_center_to(i)
+        if not isinstance(center, Integral) or isinstance(center, bool) or not 0 <= center < self.length:
+            msg = f"{name} must be in [0, {self.length - 1}], got {center!r}."
+            raise ValueError(msg)
+        return int(center)
 
-        a, b = state.tensors[i], state.tensors[j]
-        theta = np.tensordot(a, b, axes=(2, 1))
-        return theta.reshape(a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]).astype(np.complex128)
-
-    def get_entropy(self, sites: list[int]) -> np.float64:
-        """Compute von Neumann entanglement entropy across a bond in nats.
+    @staticmethod
+    def _validate_decomposition(decomposition: str) -> None:
+        """Validate a canonicalization decomposition name.
 
         Args:
-            sites: Exactly two adjacent site indices ``[i, i + 1]``.
+            decomposition: Decomposition name to validate.
 
-        Returns:
-            Entropy of the normalized squared Schmidt coefficients, using natural logarithms.
+        Raises:
+            ValueError: If ``decomposition`` is neither ``"QR"`` nor ``"SVD"``.
         """
-        i, j = self._validate_bond_sites(sites, name="entropy")
+        if decomposition not in {"QR", "SVD"}:
+            msg = f"decomposition must be 'QR' or 'SVD', got {decomposition!r}."
+            raise ValueError(msg)
 
-        if self.tensors[i].shape[2] == 1:
-            return np.float64(0.0)
-
-        theta_mat = self._bond_matrix(i, j)
-
-        s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
-        s2 = (s.astype(np.float64)) ** 2
-        norm: np.float64 = np.sum(s2, dtype=np.float64)
-        if norm == np.float64(0.0):
-            return np.float64(0.0)
-
-        p = s2 / norm
-        eps = np.finfo(np.float64).tiny
-        ent = -1 * np.sum(p * np.log(p + eps), dtype=np.float64)
-
-        return np.float64(ent)
-
-    def get_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
-        """Compute Schmidt spectrum.
-
-        Calculates the singular values of the bipartition between two
-        adjacent sites (the Schmidt coefficients), without normalizing the state.
-        The spectrum is padded or truncated to length 500 for consistent output size.
+    def set_center(self, center: int | None) -> None:
+        """Set the tracked orthogonality center without re-canonicalizing.
 
         Args:
-            sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
+            center: Mixed-canonical center site index, or ``None`` if the gauge is unknown.
+        """
+        if center is not None:
+            center = self._validate_center(center)
+        self._orthogonality_center = center
+
+    def update_center_after_split(self, left_site: int, right_site: int, svd_distribution: str) -> None:
+        """Update the tracked center after a two-site SVD split.
+
+        Call immediately after ``split_two_site`` or ``split_tdvp`` assigns new bond
+        tensors.
+
+        Args:
+            left_site: Left site index of the split pair.
+            right_site: Right site index of the split pair.
+            svd_distribution: ``"left"``, ``"right"``, or ``"sqrt"``.
+
+        Raises:
+            ValueError: If the sites are not an in-range adjacent pair or the
+                distribution is not ``"left"``, ``"right"``, or ``"sqrt"``.
+
+        Notes:
+            A left or right distribution moves a center that already covered the
+            split pair. If the prior center did not cover the pair, or the singular
+            values were split with ``"sqrt"``, the gauge remains unknown.
+        """
+        left_site = self._validate_center(left_site, name="left_site")
+        right_site = self._validate_center(right_site, name="right_site")
+        if right_site != left_site + 1:
+            msg = f"Split sites must be adjacent and ordered, got ({left_site}, {right_site})."
+            raise ValueError(msg)
+        if svd_distribution not in {"left", "right", "sqrt"}:
+            msg = f"svd_distribution must be 'left', 'right', or 'sqrt', got {svd_distribution!r}."
+            raise ValueError(msg)
+
+        if self._orthogonality_center not in {left_site, right_site} or svd_distribution == "sqrt":
+            self._orthogonality_center = None
+        elif svd_distribution == "right":
+            self._orthogonality_center = right_site
+        else:
+            self._orthogonality_center = left_site
+
+    def assert_center(self, expected: int, *, context: str) -> None:
+        """Raise if the tracked center is unknown or not ``expected``.
+
+        Args:
+            expected: Required center site index.
+            context: Description of the calling algorithm for error messages.
+
+        Raises:
+            ValueError: If the gauge is unknown or the center does not match.
+        """
+        if self._orthogonality_center is None:
+            msg = f"{context}: MPS gauge unknown (orthogonality_center is None), expected site {expected}."
+            raise ValueError(msg)
+        if self._orthogonality_center != expected:
+            msg = f"{context}: orthogonality center at site {self._orthogonality_center}, expected site {expected}."
+            raise ValueError(msg)
+
+    def check_covers_sites(self, sites: int | list[int]) -> bool:
+        """Check whether the tracked center supports local contraction at ``sites``.
+
+        Args:
+            sites: One site index or a nearest-neighbor two-site pair.
 
         Returns:
-            NDArray[np.float64]: The Schmidt spectrum (length 500),
-            with unused entries filled with NaN.
+            True if the tracked center covers the observable site(s).
         """
-        i, j = self._validate_bond_sites(sites, name="Schmidt spectrum")
-        top_schmidt_vals = 500
-
-        if self.tensors[i].shape[2] == 1:
-            padded = np.full(top_schmidt_vals, np.nan)
-            padded[0] = self.norm(self.orthogonality_center)
-            return padded
-
-        _, s_vec, _ = linalg.svd(self._bond_matrix(i, j), full_matrices=False)
-
-        padded = np.full(top_schmidt_vals, np.nan)
-        padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
-        return padded
+        if self._orthogonality_center is None:
+            return False
+        sites_list = [sites] if isinstance(sites, int) else list(sites)
+        if len(sites_list) == 1:
+            return self._orthogonality_center == sites_list[0]
+        if len(sites_list) == 2:
+            i, j = sites_list
+            return abs(j - i) == 1 and self._orthogonality_center in {i, j}
+        return False
 
     def flip_network(self) -> None:
         """Flip MPS.
@@ -890,24 +705,28 @@ class MPS:
         if self._orthogonality_center is not None:
             self._orthogonality_center = self.length - 1 - self._orthogonality_center
 
-    def almost_equal(self, other: MPS) -> bool:
-        """Checks if the tensors of this MPS are almost equal to the other MPS.
+    def shift_center_to(self, target: int, decomposition: str = "QR") -> None:
+        """Shift the orthogonality center to ``target`` via incremental moves.
 
         Args:
-            other (MPS): The other MPS to compare with.
+            target: Desired orthogonality center site index.
+            decomposition: QR or SVD decomposition for each shift step.
 
-        Returns:
-            bool: True if all tensors of this tensor are almost equal to the
-                other MPS, False otherwise.
+        Raises:
+            ValueError: If the target or decomposition is invalid, or the gauge is unknown.
         """
-        if self.length != other.length:
-            return False
-        for i in range(self.length):
-            if self.tensors[i].shape != other.tensors[i].shape:
-                return False
-            if not np.allclose(self.tensors[i], other.tensors[i]):
-                return False
-        return True
+        target = self._validate_center(target, name="target")
+        self._validate_decomposition(decomposition)
+        if self._orthogonality_center is None:
+            msg = "Cannot shift orthogonality center when gauge is unknown."
+            raise ValueError(msg)
+        current = self._orthogonality_center
+        while current < target:
+            self.shift_orthogonality_center_right(current, decomposition)
+            current += 1
+        while current > target:
+            self.shift_orthogonality_center_left(current, decomposition)
+            current -= 1
 
     def shift_orthogonality_center_right(self, current_orthogonality_center: int, decomposition: str = "QR") -> None:
         """Shifts orthogonality center right.
@@ -1069,6 +888,52 @@ class MPS:
             raise ValueError(msg)
         self._orthogonality_center = orthogonality_center
 
+    def check_canonical_form(self) -> list[int]:
+        """Find all valid orthogonality centers from the tensors.
+
+        For each returned site, tensors to its left are left-canonical and tensors
+        to its right are right-canonical. Center 0 gives right-canonical form;
+        center ``length - 1`` gives left-canonical form.
+
+        Returns:
+            Valid center indices in ascending order, or ``[]`` if none exists.
+            Several centers can be valid, for example in a normalized product state.
+        """
+        a = copy.deepcopy(self.tensors)
+        for i, tensor in enumerate(self.tensors):
+            a[i] = np.conj(tensor)
+        b = self.tensors
+        a_truth = [False for _ in range(self.length)]
+        b_truth = [False for _ in range(self.length)]
+
+        # Find the first index where the left canonical form is not satisfied.
+        # We choose the rightmost index in case even that one fulfills the condition
+        for i in range(self.length):
+            mat = oe.contract("ijk, ijl->kl", a[i], b[i])
+            test_identity = np.eye(mat.shape[0], dtype=complex)
+            if np.allclose(mat, test_identity):
+                a_truth[i] = True
+
+        # Find the last index where the right canonical form is not satisfied.
+        # We choose the leftmost index in case even that one fulfills the condition
+        for i in reversed(range(self.length)):
+            mat = oe.contract("ijk, ilk->jl", b[i], a[i])
+            test_identity = np.eye(mat.shape[0], dtype=complex)
+            if np.allclose(mat, test_identity):
+                b_truth[i] = True
+
+        mixed_truth = [False for _ in range(self.length)]
+        for i in range(self.length):
+            if all(a_truth[:i]) and all(b_truth[i + 1 :]):
+                mixed_truth[i] = True
+
+        sites = []
+        for i, val in enumerate(mixed_truth):
+            if val:
+                sites.append(i)
+
+        return sites
+
     def _scaled_center_tensor(self) -> tuple[NDArray[np.complex128], float, float]:
         """Return stable components for the tracked center's Frobenius norm.
 
@@ -1147,6 +1012,35 @@ class MPS:
             if flipped:
                 self.flip_network()
 
+    def norm(self, site: int | None = None) -> np.float64:
+        """Return the full-state Euclidean norm ``sqrt(<psi|psi>)``.
+
+        Args:
+            site: Optional center site for a local contraction. Shifts the center
+                on a copy if needed. Uses a full contraction when the gauge is unknown
+                or ``site`` is ``None``.
+
+        Returns:
+            The norm of the entire state, regardless of ``site``.
+
+        Notes:
+            For jump probabilities and other quantities proportional to ``<psi|psi>``,
+            use ``norm(...) ** 2``.
+        """
+        if site is not None and self.orthogonality_center is not None:
+            if not self.check_covers_sites(site):
+                temp = copy.deepcopy(self)
+                temp.shift_center_to(site)
+            else:
+                temp = self
+            _, scale, scaled_norm = temp._scaled_center_tensor()
+            return np.float64(scale * scaled_norm)
+
+        squared = float(self.scalar_product(self).real)
+        return np.float64(np.sqrt(max(squared, 0.0)))
+
+    # Compression
+
     def compress(
         self,
         threshold: float,
@@ -1209,6 +1103,72 @@ class MPS:
             self.shift_orthogonality_center_right(self._orthogonality_center, "QR")
         while self._orthogonality_center > orth_center:
             self.shift_orthogonality_center_left(self._orthogonality_center, "QR")
+
+    # Expectations and local operators
+
+    def _validate_bond_sites(self, sites: object, *, name: str) -> tuple[int, int]:
+        """Validate an ordered nearest-neighbor bond.
+
+        Args:
+            sites: Candidate pair of site indices.
+            name: Quantity that uses the bond, for error messages.
+
+        Returns:
+            The validated pair as Python integers.
+
+        Raises:
+            TypeError: If ``sites`` is not a list of integers.
+            ValueError: If ``sites`` does not contain two ordered, adjacent, in-range indices.
+        """
+        if not isinstance(sites, list) or any(
+            isinstance(site, bool) or not isinstance(site, Integral) for site in sites
+        ):
+            msg = f"{name} sites must be a list of integers."
+            raise TypeError(msg)
+        if len(sites) != 2:
+            msg = f"{name} requires exactly two sites, got {sites!r}."
+            raise ValueError(msg)
+        i, j = (int(site) for site in sites)
+        if not 0 <= i < self.length or not 0 <= j < self.length:
+            msg = f"{name} sites must be in [0, {self.length - 1}], got {sites!r}."
+            raise ValueError(msg)
+        if j != i + 1:
+            msg = f"{name} sites must be ordered nearest neighbors, got {sites!r}."
+            raise ValueError(msg)
+        return i, j
+
+    def _validate_observable_sites(self, sites: object) -> list[int]:
+        """Validate one or two observable sites.
+
+        Args:
+            sites: One site or a list of one or two sites.
+
+        Returns:
+            Validated site indices as Python integers.
+
+        Raises:
+            TypeError: If a site or the site container has an invalid type.
+            ValueError: If the number of sites or a site index is invalid.
+        """
+        if isinstance(sites, Integral) and not isinstance(sites, bool):
+            site_values = [sites]
+        elif isinstance(sites, list):
+            site_values = sites
+        else:
+            msg = "observable sites must be an integer or a list of integers."
+            raise TypeError(msg)
+        if not 1 <= len(site_values) <= 2:
+            msg = f"observable must act on one or two sites, got {site_values!r}."
+            raise ValueError(msg)
+        if any(isinstance(site, bool) or not isinstance(site, Integral) for site in site_values):
+            msg = "observable sites must contain only integers."
+            raise TypeError(msg)
+        resolved_sites = [int(site) for site in site_values]
+        for site in resolved_sites:
+            if not 0 <= site < self.length:
+                msg = f"observable site must be in [0, {self.length - 1}], got {site}."
+                raise ValueError(msg)
+        return resolved_sites
 
     def scalar_product(self, other: MPS, sites: int | list[int] | None = None) -> np.complex128:
         """Compute the scalar (inner) product between two Matrix Product States (MPS).
@@ -1463,6 +1423,113 @@ class MPS:
         theta = theta.reshape(left, d_i * d_j, right)
         return np.complex128(oe.contract("abc,bd,adc->", np.conj(theta), matrix, theta))
 
+    def expect(self, observable: Observable) -> float:
+        """Measure the expectation value of a given observable.
+
+        Rejects non-finite values and significant imaginary residuals with ``ValueError``.
+
+        Args:
+            observable: One-site or two-site observable to evaluate.
+
+        Returns:
+            The real expectation value, allowing only roundoff-level imaginary residuals.
+
+        Notes:
+            Uses fast local contraction when :attr:`orthogonality_center` covers the
+            observable site(s); shifts incrementally on a copy when the center is
+            known but misaligned; falls back to full contraction when the gauge is
+            unknown (``None``).
+        """
+        sites_list = self._validate_observable_sites(observable.sites)
+
+        if self._orthogonality_center is None:
+            exp = self.mixed_expectation(self, observable)
+        elif self.check_covers_sites(sites_list):
+            exp = self.local_expect(observable, sites_list)
+        else:
+            if len(sites_list) == 1:
+                target = sites_list[0]
+            else:
+                i, j = sites_list
+                center = self._orthogonality_center
+                target = i if abs(center - i) <= abs(center - j) else j
+            shifted = copy.deepcopy(self)
+            shifted.shift_center_to(target)
+            exp = shifted.local_expect(observable, sites_list)
+
+        return validate_real(exp, name="observable expectation value")
+
+    def evaluate_observables(
+        self,
+        sim_params: AnalogSimParams | DigitalSimParams,
+        results: NDArray[np.float64],
+        column_index: int = 0,
+    ) -> None:
+        """Evaluate and record expectation values of observables for a given MPS state.
+
+        Args:
+            sim_params: Simulation parameters containing sorted observables.
+            results: 2D array where ``results[observable_index, column_index]`` stores
+                scalar values or a Schmidt-coefficient array. Spectrum requests
+                require an object buffer.
+            column_index: Time or trajectory index for the column to fill.
+
+        Raises:
+            TypeError: If an observable has an invalid site or bitstring type.
+            ValueError: If an observable has invalid sites or does not define required data.
+
+        Notes:
+            Deep-copies ``self`` once and reuses that working state for all observables.
+            When :attr:`orthogonality_center` covers the observable site(s), uses fast
+            local contraction; otherwise shifts the center on the copy or falls back to
+            full contraction when the gauge is unknown (``None``).
+        """
+        temp_state = copy.deepcopy(self)
+        for obs_index, observable in enumerate(sim_params.sorted_observables):
+            if observable.type == "diagnostic":
+                min_site, max_site = self._validate_bond_sites(
+                    observable.sites,
+                    name=f"{observable.name} diagnostic",
+                )
+                diagnostic_sites = [min_site, max_site]
+                if not temp_state.check_covers_sites(diagnostic_sites):
+                    if temp_state.orthogonality_center is None:
+                        temp_state.set_canonical_form(min_site)
+                    else:
+                        center = temp_state.orthogonality_center
+                        target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
+                        temp_state.shift_center_to(target)
+                if observable.name == "entropy":
+                    results[obs_index, column_index] = temp_state.get_entropy(diagnostic_sites)
+                elif observable.name == "schmidt_spectrum":
+                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(diagnostic_sites)
+
+            elif observable.type == "bitstring":
+                bitstring = observable.bitstring
+                if not isinstance(bitstring, str):
+                    msg = "Bitstring observables must define a string bitstring."
+                    raise TypeError(msg)
+                results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
+
+            else:
+                if observable.sites is None:
+                    msg = "Operator observables must have explicit sites."
+                    raise ValueError(msg)
+                sites_list = self._validate_observable_sites(observable.sites)
+                if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
+                    if len(sites_list) == 1:
+                        target = sites_list[0]
+                    else:
+                        i, j = sites_list
+                        center = temp_state.orthogonality_center
+                        target = i if abs(center - i) <= abs(center - j) else j
+                    temp_state.shift_center_to(target)
+                if temp_state.orthogonality_center is None:
+                    exp = temp_state.mixed_expectation(temp_state, observable)
+                else:
+                    exp = temp_state.local_expect(observable, sites_list)
+                results[obs_index, column_index] = validate_real(exp, name="observable expectation value")
+
     def apply_local(self, observable: Observable) -> None:
         r"""Apply a one- or two-site local observable to this MPS in-place.
 
@@ -1597,112 +1664,7 @@ class MPS:
         ket_with_op.apply_local(observable)
         return bra.scalar_product(ket_with_op)
 
-    def evaluate_observables(
-        self,
-        sim_params: AnalogSimParams | DigitalSimParams,
-        results: NDArray[np.float64],
-        column_index: int = 0,
-    ) -> None:
-        """Evaluate and record expectation values of observables for a given MPS state.
-
-        Args:
-            sim_params: Simulation parameters containing sorted observables.
-            results: 2D array where ``results[observable_index, column_index]`` stores
-                scalar values or a Schmidt-coefficient array. Spectrum requests
-                require an object buffer.
-            column_index: Time or trajectory index for the column to fill.
-
-        Raises:
-            TypeError: If an observable has an invalid site or bitstring type.
-            ValueError: If an observable has invalid sites or does not define required data.
-
-        Notes:
-            Deep-copies ``self`` once and reuses that working state for all observables.
-            When :attr:`orthogonality_center` covers the observable site(s), uses fast
-            local contraction; otherwise shifts the center on the copy or falls back to
-            full contraction when the gauge is unknown (``None``).
-        """
-        temp_state = copy.deepcopy(self)
-        for obs_index, observable in enumerate(sim_params.sorted_observables):
-            if observable.type == "diagnostic":
-                min_site, max_site = self._validate_bond_sites(
-                    observable.sites,
-                    name=f"{observable.name} diagnostic",
-                )
-                diagnostic_sites = [min_site, max_site]
-                if not temp_state.check_covers_sites(diagnostic_sites):
-                    if temp_state.orthogonality_center is None:
-                        temp_state.set_canonical_form(min_site)
-                    else:
-                        center = temp_state.orthogonality_center
-                        target = min_site if abs(center - min_site) <= abs(center - max_site) else max_site
-                        temp_state.shift_center_to(target)
-                if observable.name == "entropy":
-                    results[obs_index, column_index] = temp_state.get_entropy(diagnostic_sites)
-                elif observable.name == "schmidt_spectrum":
-                    results[obs_index, column_index] = temp_state.get_schmidt_spectrum(diagnostic_sites)
-
-            elif observable.type == "bitstring":
-                bitstring = observable.bitstring
-                if not isinstance(bitstring, str):
-                    msg = "Bitstring observables must define a string bitstring."
-                    raise TypeError(msg)
-                results[obs_index, column_index] = self.project_onto_bitstring(bitstring)
-
-            else:
-                if observable.sites is None:
-                    msg = "Operator observables must have explicit sites."
-                    raise ValueError(msg)
-                sites_list = self._validate_observable_sites(observable.sites)
-                if temp_state.orthogonality_center is not None and not temp_state.check_covers_sites(sites_list):
-                    if len(sites_list) == 1:
-                        target = sites_list[0]
-                    else:
-                        i, j = sites_list
-                        center = temp_state.orthogonality_center
-                        target = i if abs(center - i) <= abs(center - j) else j
-                    temp_state.shift_center_to(target)
-                if temp_state.orthogonality_center is None:
-                    exp = temp_state.mixed_expectation(temp_state, observable)
-                else:
-                    exp = temp_state.local_expect(observable, sites_list)
-                results[obs_index, column_index] = validate_real(exp, name="observable expectation value")
-
-    def expect(self, observable: Observable) -> float:
-        """Measure the expectation value of a given observable.
-
-        Rejects non-finite values and significant imaginary residuals with ``ValueError``.
-
-        Args:
-            observable: One-site or two-site observable to evaluate.
-
-        Returns:
-            The real expectation value, allowing only roundoff-level imaginary residuals.
-
-        Notes:
-            Uses fast local contraction when :attr:`orthogonality_center` covers the
-            observable site(s); shifts incrementally on a copy when the center is
-            known but misaligned; falls back to full contraction when the gauge is
-            unknown (``None``).
-        """
-        sites_list = self._validate_observable_sites(observable.sites)
-
-        if self._orthogonality_center is None:
-            exp = self.mixed_expectation(self, observable)
-        elif self.check_covers_sites(sites_list):
-            exp = self.local_expect(observable, sites_list)
-        else:
-            if len(sites_list) == 1:
-                target = sites_list[0]
-            else:
-                i, j = sites_list
-                center = self._orthogonality_center
-                target = i if abs(center - i) <= abs(center - j) else j
-            shifted = copy.deepcopy(self)
-            shifted.shift_center_to(target)
-            exp = shifted.local_expect(observable, sites_list)
-
-        return validate_real(exp, name="observable expectation value")
+    # Sampling and projection
 
     def measure_single_shot(self, basis: str = "Z", rng: np.random.Generator | None = None) -> int:
         """Sample all qubits in one basis without changing the source state.
@@ -2014,32 +1976,27 @@ class MPS:
 
         return np.complex128(total_norm**2)
 
-    def norm(self, site: int | None = None) -> np.float64:
-        """Return the full-state Euclidean norm ``sqrt(<psi|psi>)``.
+    # Diagnostics
 
-        Args:
-            site: Optional center site for a local contraction. Shifts the center
-                on a copy if needed. Uses a full contraction when the gauge is unknown
-                or ``site`` is ``None``.
+    def get_cost(self) -> int:
+        """Estimate contraction cost from the internal bonds.
 
         Returns:
-            The norm of the entire state, regardless of ``site``.
-
-        Notes:
-            For jump probabilities and other quantities proportional to ``<psi|psi>``,
-            use ``norm(...) ** 2``.
+            Sum of cubed internal bond dimensions, a contraction-cost heuristic.
         """
-        if site is not None and self.orthogonality_center is not None:
-            if not self.check_covers_sites(site):
-                temp = copy.deepcopy(self)
-                temp.shift_center_to(site)
-            else:
-                temp = self
-            _, scale, scaled_norm = temp._scaled_center_tensor()
-            return np.float64(scale * scaled_norm)
+        cost = [tensor.shape[1] ** 3 for tensor in self.tensors[1:]]
+        return sum(cost)
 
-        squared = float(self.scalar_product(self).real)
-        return np.float64(np.sqrt(max(squared, 0.0)))
+    def record_diagnostics(self, diagnostics: NDArray[np.float64], column_index: int) -> None:
+        """Write runtime cost, max bond, and total bond into a diagnostics row buffer.
+
+        Args:
+            diagnostics: Array shaped ``(3, T)``; rows are cost, max bond, total bond.
+            column_index: Column (time or layer index) to fill.
+        """
+        diagnostics[0, column_index] = self.get_cost()
+        diagnostics[1, column_index] = self.get_max_bond()
+        diagnostics[2, column_index] = self.get_total_bond()
 
     def check_if_valid_mps(self) -> None:
         """MPS validity check.
@@ -2093,51 +2050,110 @@ class MPS:
             msg = f"MPS right boundary bond must have dimension 1, got {right_bond}."
             raise ValueError(msg)
 
-    def check_canonical_form(self) -> list[int]:
-        """Find all valid orthogonality centers from the tensors.
+    # Entanglement
 
-        For each returned site, tensors to its left are left-canonical and tensors
-        to its right are right-canonical. Center 0 gives right-canonical form;
-        center ``length - 1`` gives left-canonical form.
+    def _bond_matrix(self, i: int, j: int) -> NDArray[np.complex128]:
+        """Two-site matrix at the cut ``(i, j)``, gauged so its singular values are Schmidt values.
+
+        The singular values of ``tensors[i] tensors[j]`` are the Schmidt coefficients of the
+        cut only in a mixed-canonical gauge with the center on the pair; the center is moved
+        onto the pair on a copy when it is not already there.
+
+        Args:
+            i: Left site of the nearest-neighbor cut.
+            j: Right site of the cut, ``i + 1``.
 
         Returns:
-            Valid center indices in ascending order, or ``[]`` if none exists.
-            Several centers can be valid, for example in a normalized product state.
+            The two-site matrix reshaped to ``(d_i * chi_left, d_j * chi_right)``.
         """
-        a = copy.deepcopy(self.tensors)
-        for i, tensor in enumerate(self.tensors):
-            a[i] = np.conj(tensor)
-        b = self.tensors
-        a_truth = [False for _ in range(self.length)]
-        b_truth = [False for _ in range(self.length)]
+        state = self
+        if not self.check_covers_sites([i, j]):
+            state = copy.deepcopy(self)
+            if state.orthogonality_center is None:
+                state.set_canonical_form(i)
+            else:
+                state.shift_center_to(i)
 
-        # Find the first index where the left canonical form is not satisfied.
-        # We choose the rightmost index in case even that one fulfills the condition
+        a, b = state.tensors[i], state.tensors[j]
+        theta = np.tensordot(a, b, axes=(2, 1))
+        return theta.reshape(a.shape[0] * a.shape[1], b.shape[0] * b.shape[2]).astype(np.complex128)
+
+    def get_entropy(self, sites: list[int]) -> np.float64:
+        """Compute von Neumann entanglement entropy across a bond in nats.
+
+        Args:
+            sites: Exactly two adjacent site indices ``[i, i + 1]``.
+
+        Returns:
+            Entropy of the normalized squared Schmidt coefficients, using natural logarithms.
+        """
+        i, j = self._validate_bond_sites(sites, name="entropy")
+
+        if self.tensors[i].shape[2] == 1:
+            return np.float64(0.0)
+
+        theta_mat = self._bond_matrix(i, j)
+
+        s = linalg.svd(theta_mat, full_matrices=False, compute_uv=False)
+        s2 = (s.astype(np.float64)) ** 2
+        norm: np.float64 = np.sum(s2, dtype=np.float64)
+        if norm == np.float64(0.0):
+            return np.float64(0.0)
+
+        p = s2 / norm
+        eps = np.finfo(np.float64).tiny
+        ent = -1 * np.sum(p * np.log(p + eps), dtype=np.float64)
+
+        return np.float64(ent)
+
+    def get_schmidt_spectrum(self, sites: list[int]) -> NDArray[np.float64]:
+        """Compute Schmidt spectrum.
+
+        Calculates the singular values of the bipartition between two
+        adjacent sites (the Schmidt coefficients), without normalizing the state.
+        The spectrum is padded or truncated to length 500 for consistent output size.
+
+        Args:
+            sites (list[int]): A list of exactly two adjacent site indices (i, i+1).
+
+        Returns:
+            NDArray[np.float64]: The Schmidt spectrum (length 500),
+            with unused entries filled with NaN.
+        """
+        i, j = self._validate_bond_sites(sites, name="Schmidt spectrum")
+        top_schmidt_vals = 500
+
+        if self.tensors[i].shape[2] == 1:
+            padded = np.full(top_schmidt_vals, np.nan)
+            padded[0] = self.norm(self.orthogonality_center)
+            return padded
+
+        _, s_vec, _ = linalg.svd(self._bond_matrix(i, j), full_matrices=False)
+
+        padded = np.full(top_schmidt_vals, np.nan)
+        padded[: min(top_schmidt_vals, len(s_vec))] = s_vec[:top_schmidt_vals]
+        return padded
+
+    # Comparison and conversion
+
+    def almost_equal(self, other: MPS) -> bool:
+        """Checks if the tensors of this MPS are almost equal to the other MPS.
+
+        Args:
+            other (MPS): The other MPS to compare with.
+
+        Returns:
+            bool: True if all tensors of this tensor are almost equal to the
+                other MPS, False otherwise.
+        """
+        if self.length != other.length:
+            return False
         for i in range(self.length):
-            mat = oe.contract("ijk, ijl->kl", a[i], b[i])
-            test_identity = np.eye(mat.shape[0], dtype=complex)
-            if np.allclose(mat, test_identity):
-                a_truth[i] = True
-
-        # Find the last index where the right canonical form is not satisfied.
-        # We choose the leftmost index in case even that one fulfills the condition
-        for i in reversed(range(self.length)):
-            mat = oe.contract("ijk, ilk->jl", b[i], a[i])
-            test_identity = np.eye(mat.shape[0], dtype=complex)
-            if np.allclose(mat, test_identity):
-                b_truth[i] = True
-
-        mixed_truth = [False for _ in range(self.length)]
-        for i in range(self.length):
-            if all(a_truth[:i]) and all(b_truth[i + 1 :]):
-                mixed_truth[i] = True
-
-        sites = []
-        for i, val in enumerate(mixed_truth):
-            if val:
-                sites.append(i)
-
-        return sites
+            if self.tensors[i].shape != other.tensors[i].shape:
+                return False
+            if not np.allclose(self.tensors[i], other.tensors[i]):
+                return False
+        return True
 
     def to_vec(self) -> NDArray[np.complex128]:
         r"""Converts the MPS to a full state vector representation.

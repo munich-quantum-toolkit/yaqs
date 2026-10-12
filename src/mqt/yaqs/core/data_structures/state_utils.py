@@ -322,6 +322,69 @@ def normalize_vector(vec: NDArray[np.complex128]) -> NDArray[np.complex128]:
     return scaled / np.linalg.norm(scaled)
 
 
+def normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
+    """Validate and return a trace-one copy of a density matrix.
+
+    Hermiticity uses ``atol=1e-12`` and ``rtol=1e-10`` after scaling by
+    the largest real or imaginary component. Positive semidefiniteness uses
+    the same absolute and relative tolerances on the eigenvalue scale. This
+    makes both tests independent of the input matrix's overall normalization.
+
+    Returns:
+        A normalized copy of ``rho``.
+
+    Raises:
+        ValueError: If ``rho`` is not a finite square matrix, is not Hermitian
+            or positive semidefinite within the documented tolerances, or does
+            not have a positive real trace.
+    """
+    value = np.array(rho, dtype=np.complex128, copy=True)
+    if value.ndim != 2 or value.shape[0] == 0 or value.shape[0] != value.shape[1]:
+        msg = "density_matrix must be a square 2-D array."
+        raise ValueError(msg)
+    if not np.all(np.isfinite(value)):
+        msg = "density_matrix must contain only finite values."
+        raise ValueError(msg)
+
+    scale = _max_component_magnitude(value)
+    if scale <= 0.0:
+        msg = "density_matrix must have a positive real trace."
+        raise ValueError(msg)
+    scaled = value / scale
+    if not np.allclose(
+        scaled,
+        scaled.conj().T,
+        rtol=_STATE_VALIDATION_RTOL,
+        atol=_STATE_VALIDATION_ATOL,
+    ):
+        msg = (
+            f"density_matrix must be Hermitian within atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}."
+        )
+        raise ValueError(msg)
+
+    trace = np.trace(scaled)
+    trace_scale = float(np.sum(np.abs(np.diag(scaled))))
+    trace_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * trace_scale
+    if abs(trace.imag) > trace_tolerance or trace.real <= 0.0:
+        msg = "density_matrix must have a positive real trace."
+        raise ValueError(msg)
+
+    hermitian = 0.5 * (scaled + scaled.conj().T)
+    eigenvalues = np.linalg.eigvalsh(hermitian)
+    eigenvalue_scale = float(np.max(np.abs(eigenvalues), initial=0.0))
+    psd_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * eigenvalue_scale
+    minimum = float(eigenvalues[0])
+    if minimum < -psd_tolerance:
+        msg = (
+            "density_matrix must be positive semidefinite within "
+            f"atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}; "
+            f"minimum eigenvalue is {minimum:.3e}."
+        )
+        raise ValueError(msg)
+
+    return hermitian / float(np.trace(hermitian).real)
+
+
 def _resolve_site_dims(
     length: int,
     physical_dimensions: list[int] | int | None,
@@ -522,66 +585,3 @@ def embed_two_site_factors(
             local = np.eye(dims[k], dtype=np.complex128)
         res = np.kron(local, res)
     return np.asarray(res, dtype=np.complex128)
-
-
-def normalize_density_matrix(rho: NDArray[np.complex128]) -> NDArray[np.complex128]:
-    """Validate and return a trace-one copy of a density matrix.
-
-    Hermiticity uses ``atol=1e-12`` and ``rtol=1e-10`` after scaling by
-    the largest real or imaginary component. Positive semidefiniteness uses
-    the same absolute and relative tolerances on the eigenvalue scale. This
-    makes both tests independent of the input matrix's overall normalization.
-
-    Returns:
-        A normalized copy of ``rho``.
-
-    Raises:
-        ValueError: If ``rho`` is not a finite square matrix, is not Hermitian
-            or positive semidefinite within the documented tolerances, or does
-            not have a positive real trace.
-    """
-    value = np.array(rho, dtype=np.complex128, copy=True)
-    if value.ndim != 2 or value.shape[0] == 0 or value.shape[0] != value.shape[1]:
-        msg = "density_matrix must be a square 2-D array."
-        raise ValueError(msg)
-    if not np.all(np.isfinite(value)):
-        msg = "density_matrix must contain only finite values."
-        raise ValueError(msg)
-
-    scale = _max_component_magnitude(value)
-    if scale <= 0.0:
-        msg = "density_matrix must have a positive real trace."
-        raise ValueError(msg)
-    scaled = value / scale
-    if not np.allclose(
-        scaled,
-        scaled.conj().T,
-        rtol=_STATE_VALIDATION_RTOL,
-        atol=_STATE_VALIDATION_ATOL,
-    ):
-        msg = (
-            f"density_matrix must be Hermitian within atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}."
-        )
-        raise ValueError(msg)
-
-    trace = np.trace(scaled)
-    trace_scale = float(np.sum(np.abs(np.diag(scaled))))
-    trace_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * trace_scale
-    if abs(trace.imag) > trace_tolerance or trace.real <= 0.0:
-        msg = "density_matrix must have a positive real trace."
-        raise ValueError(msg)
-
-    hermitian = 0.5 * (scaled + scaled.conj().T)
-    eigenvalues = np.linalg.eigvalsh(hermitian)
-    eigenvalue_scale = float(np.max(np.abs(eigenvalues), initial=0.0))
-    psd_tolerance = _STATE_VALIDATION_ATOL + _STATE_VALIDATION_RTOL * eigenvalue_scale
-    minimum = float(eigenvalues[0])
-    if minimum < -psd_tolerance:
-        msg = (
-            "density_matrix must be positive semidefinite within "
-            f"atol={_STATE_VALIDATION_ATOL} and rtol={_STATE_VALIDATION_RTOL}; "
-            f"minimum eigenvalue is {minimum:.3e}."
-        )
-        raise ValueError(msg)
-
-    return hermitian / float(np.trace(hermitian).real)

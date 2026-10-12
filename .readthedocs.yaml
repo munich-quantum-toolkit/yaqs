@@ -13,10 +13,11 @@ build:
       - uv pip install --python "$READTHEDOCS_VIRTUALENV_PATH/bin/python" --group docs --exact -e .
     build:
       html:
-        # Render saved notebook outputs; execute and validate examples in GitHub Actions.
+        # Publish saved snapshots; GitHub Actions checks execution against current package code.
         - >-
           "$READTHEDOCS_VIRTUALENV_PATH/bin/python" -u -m sphinx
           -j 1 -n -T -W --keep-going -b html -d docs/_build/doctrees
+          -D yaqs_require_current_runtime=0
           docs "$READTHEDOCS_OUTPUT/html"
 
 python:

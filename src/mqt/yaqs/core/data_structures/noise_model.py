@@ -318,6 +318,101 @@ class NoiseModel:
 
         self.processes = [self._normalize_process(original) for original in processes]
 
+    def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
+        """Sample a concrete NoiseModel from any distribution-based strengths.
+
+        For each process:
+
+        - If ``strength`` is a float, it is kept as is.
+        - If ``strength`` is a dict describing a distribution, a value is sampled.
+
+        Negative draws from ``normal`` are clamped to ``0.0`` with a warning.
+        Sampled strengths are re-validated before the resolved model is returned.
+
+        Args:
+            rng: The random number generator or seed to use for sampling.
+                If None, a new generator is created.
+
+        Returns:
+            A new NoiseModel instance where all process strengths are concrete
+            floats. This sampled model represents the specific realization of
+            static disorder used for a simulation run.
+
+        Raises:
+            ValueError: If an unsupported distribution type is provided or a
+                sampled strength is invalid.
+        """
+        generator = np.random.default_rng(rng)
+        new_processes: list[dict[str, Any]] = []
+        for proc in self.processes:
+            new_proc = copy.deepcopy(proc)
+            strength_val = proc["strength"]
+
+            if isinstance(strength_val, dict):
+                dist_type = strength_val["distribution"]
+                mean = strength_val["mean"]
+                std = strength_val["std"]
+
+                if dist_type == "normal":
+                    sampled_val = float(generator.normal(loc=mean, scale=std))
+                    if sampled_val < 0:
+                        logger.warning(
+                            "Sampled noise strength %f using 'normal' distribution (mean=%f, std=%f) "
+                            "was negative and clamped to 0.0.",
+                            sampled_val,
+                            mean,
+                            std,
+                        )
+                    sampled_val = float(max(0.0, sampled_val))
+                elif dist_type == "lognormal":
+                    sampled_val = float(generator.lognormal(mean=mean, sigma=std))
+                elif dist_type == "truncated_normal":
+                    if math.isclose(std, 0.0, abs_tol=1e-8):
+                        sampled_val = float(max(0.0, mean))
+                    else:
+                        a_norm = (0.0 - mean) / std
+                        b_norm = (np.inf - mean) / std
+                        sampled_val = float(truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator))
+                else:
+                    msg = f"Unsupported distribution type: {dist_type}"
+                    raise ValueError(msg)
+                new_proc["strength"] = _validate_finite_nonnegative_real(sampled_val, "sampled process strength")
+            else:
+                new_proc["strength"] = _validate_finite_nonnegative_real(strength_val, "process strength")
+
+            new_processes.append(new_proc)
+
+        new_model = object.__new__(NoiseModel)
+        new_model.processes = new_processes
+        new_model.scheduled_jumps = copy.deepcopy(self.scheduled_jumps)
+        return new_model
+
+    @staticmethod
+    def get_operator(name: str) -> NDArray[np.complex128]:
+        """Retrieve the operator matrix for a supported library name.
+
+        Args:
+            name: Name of the noise process (fixed library name, short Pauli
+                ``x``/``y``/``z``, or an exact ``crosstalk_[xyz]{2}`` label).
+
+        Returns:
+            The matrix representation of the operator.
+
+        Raises:
+            ValueError: If ``name`` is not a supported operator name.
+        """
+        if name in PAULI_MAP:
+            return np.array(PAULI_MAP[name], copy=True)
+        suffix = _crosstalk_suffix(name)
+        if suffix is not None:
+            return np.array(np.kron(PAULI_MAP[suffix[0]], PAULI_MAP[suffix[1]]), copy=True)
+        operator_class = _LIBRARY_CLASSES.get(name)
+        if operator_class is None:
+            msg = f"Unknown noise operator '{name}'. {_supported_operator_message()}"
+            raise ValueError(msg)
+        operator: BaseGate = operator_class()
+        return np.array(operator.matrix, dtype=np.complex128, copy=True)
+
     @staticmethod
     def _normalize_scheduled_jump(jump: object) -> dict[str, Any]:
         original = _require_mapping(jump, "scheduled jump")
@@ -515,101 +610,6 @@ class NoiseModel:
             user_matrix=user_matrix,
             factors_provided=factors_provided,
         )
-
-    def sample(self, rng: np.random.Generator | int | None = None) -> NoiseModel:
-        """Sample a concrete NoiseModel from any distribution-based strengths.
-
-        For each process:
-
-        - If ``strength`` is a float, it is kept as is.
-        - If ``strength`` is a dict describing a distribution, a value is sampled.
-
-        Negative draws from ``normal`` are clamped to ``0.0`` with a warning.
-        Sampled strengths are re-validated before the resolved model is returned.
-
-        Args:
-            rng: The random number generator or seed to use for sampling.
-                If None, a new generator is created.
-
-        Returns:
-            A new NoiseModel instance where all process strengths are concrete
-            floats. This sampled model represents the specific realization of
-            static disorder used for a simulation run.
-
-        Raises:
-            ValueError: If an unsupported distribution type is provided or a
-                sampled strength is invalid.
-        """
-        generator = np.random.default_rng(rng)
-        new_processes: list[dict[str, Any]] = []
-        for proc in self.processes:
-            new_proc = copy.deepcopy(proc)
-            strength_val = proc["strength"]
-
-            if isinstance(strength_val, dict):
-                dist_type = strength_val["distribution"]
-                mean = strength_val["mean"]
-                std = strength_val["std"]
-
-                if dist_type == "normal":
-                    sampled_val = float(generator.normal(loc=mean, scale=std))
-                    if sampled_val < 0:
-                        logger.warning(
-                            "Sampled noise strength %f using 'normal' distribution (mean=%f, std=%f) "
-                            "was negative and clamped to 0.0.",
-                            sampled_val,
-                            mean,
-                            std,
-                        )
-                    sampled_val = float(max(0.0, sampled_val))
-                elif dist_type == "lognormal":
-                    sampled_val = float(generator.lognormal(mean=mean, sigma=std))
-                elif dist_type == "truncated_normal":
-                    if math.isclose(std, 0.0, abs_tol=1e-8):
-                        sampled_val = float(max(0.0, mean))
-                    else:
-                        a_norm = (0.0 - mean) / std
-                        b_norm = (np.inf - mean) / std
-                        sampled_val = float(truncnorm.rvs(a_norm, b_norm, loc=mean, scale=std, random_state=generator))
-                else:
-                    msg = f"Unsupported distribution type: {dist_type}"
-                    raise ValueError(msg)
-                new_proc["strength"] = _validate_finite_nonnegative_real(sampled_val, "sampled process strength")
-            else:
-                new_proc["strength"] = _validate_finite_nonnegative_real(strength_val, "process strength")
-
-            new_processes.append(new_proc)
-
-        new_model = object.__new__(NoiseModel)
-        new_model.processes = new_processes
-        new_model.scheduled_jumps = copy.deepcopy(self.scheduled_jumps)
-        return new_model
-
-    @staticmethod
-    def get_operator(name: str) -> NDArray[np.complex128]:
-        """Retrieve the operator matrix for a supported library name.
-
-        Args:
-            name: Name of the noise process (fixed library name, short Pauli
-                ``x``/``y``/``z``, or an exact ``crosstalk_[xyz]{2}`` label).
-
-        Returns:
-            The matrix representation of the operator.
-
-        Raises:
-            ValueError: If ``name`` is not a supported operator name.
-        """
-        if name in PAULI_MAP:
-            return np.array(PAULI_MAP[name], copy=True)
-        suffix = _crosstalk_suffix(name)
-        if suffix is not None:
-            return np.array(np.kron(PAULI_MAP[suffix[0]], PAULI_MAP[suffix[1]]), copy=True)
-        operator_class = _LIBRARY_CLASSES.get(name)
-        if operator_class is None:
-            msg = f"Unknown noise operator '{name}'. {_supported_operator_message()}"
-            raise ValueError(msg)
-        operator: BaseGate = operator_class()
-        return np.array(operator.matrix, dtype=np.complex128, copy=True)
 
 
 def _validate_factors(factors: object) -> tuple[NDArray[np.complex128], NDArray[np.complex128]]:

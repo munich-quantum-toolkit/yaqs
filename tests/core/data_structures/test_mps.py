@@ -21,9 +21,8 @@ import pytest
 from qiskit.circuit import QuantumCircuit
 from scipy.stats import unitary_group
 
-from mqt.yaqs import MPO, AnalogSimParams, DigitalSimParams, Hamiltonian, Observable, Simulator, State
+from mqt.yaqs import MPO, MPS, AnalogSimParams, DigitalSimParams, Hamiltonian, Observable, Simulator, State
 from mqt.yaqs.core.data_structures import mps as mps_mod
-from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.data_structures.state_utils import embed_one_site_operator
 from mqt.yaqs.core.methods.decompositions import SvdDistribution, merge_two_site, split_two_site
 from tests.site_order_reference import embed_local_operator, mixed_radix_index
