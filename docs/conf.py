@@ -172,6 +172,104 @@ copybutton_line_continuation_character = "\\"
 
 modindex_common_prefix = ["mqt.yaqs."]
 
+# Supported imports mapped to their defining objects. Public class members are
+# included; implementation helpers remain outside the user reference.
+yaqs_public_api = {
+    "mqt.yaqs.Simulator": "mqt.yaqs.simulator.Simulator",
+    "mqt.yaqs.State": "mqt.yaqs.core.data_structures.state.State",
+    "mqt.yaqs.Hamiltonian": "mqt.yaqs.core.data_structures.hamiltonian.Hamiltonian",
+    "mqt.yaqs.Observable": "mqt.yaqs.core.data_structures.observable.Observable",
+    "mqt.yaqs.Result": "mqt.yaqs.core.data_structures.result.Result",
+    "mqt.yaqs.MPS": "mqt.yaqs.core.data_structures.mps.MPS",
+    "mqt.yaqs.MPO": "mqt.yaqs.core.data_structures.mpo.MPO",
+    "mqt.yaqs.AnalogSimParams": "mqt.yaqs.core.data_structures.simulation_parameters.AnalogSimParams",
+    "mqt.yaqs.DigitalSimParams": "mqt.yaqs.core.data_structures.simulation_parameters.DigitalSimParams",
+    "mqt.yaqs.SimulationProgram": "mqt.yaqs.core.data_structures.simulation_program.SimulationProgram",
+    "mqt.yaqs.NoiseModel": "mqt.yaqs.core.data_structures.noise_model.NoiseModel",
+    "mqt.yaqs.EquivalenceChecker": "mqt.yaqs.equivalence_checker.EquivalenceChecker",
+    "mqt.yaqs.MemoryCharacterizer": "mqt.yaqs.memory_characterizer.MemoryCharacterizer",
+    "mqt.yaqs.NoiseCharacterizer": "mqt.yaqs.noise_characterizer.NoiseCharacterizer",
+    "mqt.yaqs.characterization.memory.CharacterizationResult": (
+        "mqt.yaqs.characterization.memory.operational_memory.results.CharacterizationResult"
+    ),
+    "mqt.yaqs.characterization.memory.ProbeSet": (
+        "mqt.yaqs.characterization.memory.operational_memory.samples.ProbeSet"
+    ),
+    "mqt.yaqs.characterization.memory.DenseProcessTensor": (
+        "mqt.yaqs.characterization.memory.backends.tomography.process_tensors.DenseProcessTensor"
+    ),
+    "mqt.yaqs.characterization.memory.MPOProcessTensor": (
+        "mqt.yaqs.characterization.memory.backends.tomography.process_tensors.MPOProcessTensor"
+    ),
+    "mqt.yaqs.characterization.noise.NoiseCharacterizationResult": (
+        "mqt.yaqs.characterization.noise.optimization.results.NoiseCharacterizationResult"
+    ),
+    "mqt.yaqs.core.data_structures.state.Representation": "mqt.yaqs.core.data_structures.state_utils.Representation",
+    "mqt.yaqs.characterization.memory.backends.tomography.TomographyBasis": (
+        "mqt.yaqs.characterization.memory.backends.tomography.basis.TomographyBasis"
+    ),
+    **{
+        name: name
+        for name in (
+            "mqt.yaqs.equivalence_checker.EquivalenceCheckResult",
+            "mqt.yaqs.equivalence_checker.EquivalenceEnsembleResult",
+            "mqt.yaqs.equivalence_checker.Representation",
+            "mqt.yaqs.core.data_structures.observable.ObservableType",
+            "mqt.yaqs.core.data_structures.simulation_parameters.SimulationPreset",
+            "mqt.yaqs.core.data_structures.simulation_parameters.GateMode",
+            "mqt.yaqs.core.data_structures.simulation_parameters.TDVPMode",
+            "mqt.yaqs.core.methods.decompositions.SvdDistribution",
+            "mqt.yaqs.core.linalg.svd_utils.TruncMode",
+            "mqt.yaqs.core.parallel_utils.MPContext",
+            "mqt.yaqs.characterization.memory.shared.interventions.Intervention",
+            "mqt.yaqs.characterization.memory.shared.interventions.InterventionSequence",
+            "mqt.yaqs.characterization.memory.shared.interventions.InterventionStyle",
+            "mqt.yaqs.characterization.memory.shared.utils.CharacterizerRepresentation",
+            "mqt.yaqs.characterization.noise.shared.representation.NoiseRepresentation",
+            "mqt.yaqs.characterization.memory.backends.surrogates.model.ProcessTensorSurrogate",
+            "mqt.yaqs.digital.digital_tjm.construct_generator_mpo",
+            "mqt.yaqs.core.libraries.gate_library.GateLibrary",
+            "mqt.yaqs.core.libraries.gate_library.BaseGate",
+            "mqt.yaqs.core.libraries.gate_library.X",
+            "mqt.yaqs.core.libraries.gate_library.Y",
+            "mqt.yaqs.core.libraries.gate_library.Z",
+            "mqt.yaqs.core.libraries.gate_library.H",
+            "mqt.yaqs.core.libraries.gate_library.Destroy",
+            "mqt.yaqs.core.libraries.gate_library.Create",
+            "mqt.yaqs.core.libraries.gate_library.Id",
+            "mqt.yaqs.core.libraries.gate_library.SX",
+            "mqt.yaqs.core.libraries.gate_library.SXdg",
+            "mqt.yaqs.core.libraries.gate_library.Sdg",
+            "mqt.yaqs.core.libraries.gate_library.S",
+            "mqt.yaqs.core.libraries.gate_library.Tdg",
+            "mqt.yaqs.core.libraries.gate_library.T",
+            "mqt.yaqs.core.libraries.gate_library.Rx",
+            "mqt.yaqs.core.libraries.gate_library.Ry",
+            "mqt.yaqs.core.libraries.gate_library.Rz",
+            "mqt.yaqs.core.libraries.gate_library.Phase",
+            "mqt.yaqs.core.libraries.gate_library.U2",
+            "mqt.yaqs.core.libraries.gate_library.U",
+            "mqt.yaqs.core.libraries.gate_library.CX",
+            "mqt.yaqs.core.libraries.gate_library.CZ",
+            "mqt.yaqs.core.libraries.gate_library.CCX",
+            "mqt.yaqs.core.libraries.gate_library.CCZ",
+            "mqt.yaqs.core.libraries.gate_library.CPhase",
+            "mqt.yaqs.core.libraries.gate_library.SWAP",
+            "mqt.yaqs.core.libraries.gate_library.CSWAP",
+            "mqt.yaqs.core.libraries.gate_library.Rxx",
+            "mqt.yaqs.core.libraries.gate_library.Ryy",
+            "mqt.yaqs.core.libraries.gate_library.Rzz",
+            "mqt.yaqs.core.libraries.circuit_library.create_ising_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.create_2d_ising_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.create_heisenberg_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.create_2d_heisenberg_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.create_1d_fermi_hubbard_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.create_2d_fermi_hubbard_circuit",
+            "mqt.yaqs.core.libraries.circuit_library.nearest_neighbour_random_circuit",
+        )
+    },
+}
+
 autoapi_dirs = ["../src/mqt"]
 autoapi_python_use_implicit_namespaces = True
 autoapi_python_class_content = "both"

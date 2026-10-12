@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from docutils import nodes
 from sphinx import addnodes
 from sphinx.domains.python import ObjectEntry, PythonDomain
+from sphinx.errors import ExtensionError
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -79,6 +80,24 @@ def _canonical_name(objects: dict[str, PythonObject], name: str) -> str:
             return name
 
 
+def _supported_object(app: Sphinx, name: str, *, module: bool = False) -> bool:
+    """Select supported objects, class members, and their containing modules.
+
+    Returns:
+        Whether the object belongs in the user reference.
+    """
+    public_api = app.config.yaqs_public_api
+    if not public_api:
+        return True
+    roots = set(public_api) | set(public_api.values())
+    if name in roots:
+        return True
+    return any(
+        root.startswith(f"{name}.") if module else name.startswith(f"{root}.")
+        for root in (roots if module else public_api.values())
+    )
+
+
 def _public_imports(
     app: Sphinx,
     what: str,
@@ -86,19 +105,33 @@ def _public_imports(
     obj: PythonObject,
     skip: bool,  # ruff: ignore[boolean-type-hint-positional-argument] - Sphinx calls event handlers positionally.
     options: list[str],
-) -> None:
-    """List explicit public re-exports without repeating their documentation."""
-    del app, name, options
+) -> bool | None:
+    """Select API entries and list supported imports without duplicate descriptions.
+
+    Returns:
+        True for an unsupported entry, otherwise AutoAPI's default selection.
+    """
+    del options
+    if not _supported_object(app, name, module=what in {"module", "package"}):
+        return True
     if skip or what not in {"module", "package"}:
-        return
+        return None
     exports = obj.obj.get("all") or []
-    links = [
-        f"* :py:obj:`{child.name} <{child.obj['original_path']}>`"
-        for child in obj.children
-        if child.imported and child.name in exports
-    ]
+    if app.config.yaqs_public_api:
+        links = [
+            f"* :py:obj:`{public.rsplit('.', 1)[1]} <{canonical}>`"
+            for public, canonical in app.config.yaqs_public_api.items()
+            if public.rsplit(".", 1)[0] == name and public != canonical
+        ]
+    else:
+        links = [
+            f"* :py:obj:`{child.name} <{child.obj['original_path']}>`"
+            for child in obj.children
+            if child.imported and child.name in exports
+        ]
     if links:
         obj.docstring += "\n\n.. rubric:: Public imports\n\n" + "\n".join(links) + "\n"
+    return None
 
 
 def _resolve_api_references(app: Sphinx, doctree: nodes.document) -> None:
@@ -138,9 +171,12 @@ def _resolve_api_references(app: Sphinx, doctree: nodes.document) -> None:
         if target.startswith("np."):
             target = "numpy." + target[3:]
         obj = objects.get(target)
-        if (
-            obj is not None and not obj.display and not obj.imported
-        ) or target == "multiprocessing.context.BaseContext":
+        omitted = (
+            obj is not None
+            and not obj.display
+            and (not obj.imported or (node.get("reftype") == "mod" and not _supported_object(app, target, module=True)))
+        )
+        if omitted or target == "multiprocessing.context.BaseContext":
             # Keep known internal types readable without linking to deliberately
             # omitted API entries. Python has no inventory entry for BaseContext.
             # Unknown YAQS names still pass through to Sphinx's strict check.
@@ -156,14 +192,28 @@ def _resolve_api_references(app: Sphinx, doctree: nodes.document) -> None:
 
 
 def _register_public_aliases(app: Sphinx, env: object) -> None:
-    """Keep public re-export names available to downstream intersphinx users."""
+    """Keep public re-export names available to downstream intersphinx users.
+
+    Raises:
+        ExtensionError: If a supported import does not resolve to a rendered object.
+    """
     del env
     objects = getattr(app.env, "autoapi_all_objects", {})
+    if objects:
+        for public, canonical in app.config.yaqs_public_api.items():
+            obj = objects.get(canonical)
+            if obj is None or not obj.display or _canonical_name(objects, public) != canonical:
+                msg = f"Supported API entry {public} must resolve to a rendered object: {canonical}"
+                raise ExtensionError(msg)
     domain = app.env.domains["py"]
     canonical_entries = dict(domain.objects)
     aliases = {}
     for name, obj in objects.items():
-        if not obj.imported or obj.obj.get("hide"):
+        if (
+            not obj.imported
+            or obj.obj.get("hide")
+            or (app.config.yaqs_public_api and name not in app.config.yaqs_public_api)
+        ):
             continue
         canonical = _canonical_name(objects, name)
         for target, entry in canonical_entries.items():
@@ -207,6 +257,7 @@ def setup(app: Sphinx) -> dict[str, bool]:
     Returns:
         Parallel build support declarations.
     """
+    app.add_config_value("yaqs_public_api", {}, "env", types=[dict])
     if "autoapi-skip-member" in app.events.events:
         app.connect("autoapi-skip-member", _public_imports)
     app.add_domain(_APIPythonDomain, override=True)
