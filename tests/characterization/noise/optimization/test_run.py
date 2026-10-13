@@ -123,6 +123,42 @@ def test_public_noise_fit_honors_limit_and_reports_initial_model_loss(n_paramete
     np.testing.assert_allclose([process["strength"] for process in initial_model.processes], strengths)
 
 
+@pytest.mark.parametrize("seed", [0, 42])
+def test_public_noise_fit_repeats_with_optimizer_seed(seed: int) -> None:
+    """Seeded CMA-ES fits repeat candidate losses and fitted dynamics, including seed zero."""
+    observables = [Observable("z", 0)]
+    params = AnalogSimParams(observables, elapsed_time=0.2, dt=0.1, sample_timesteps=True)
+    initial_model = NoiseModel([
+        {"name": "pauli_x", "sites": [0], "strength": 0.3},
+        {"name": "pauli_y", "sites": [0], "strength": 0.1},
+    ])
+    reference = np.exp(-2 * 0.08 * params.times)[None, :]
+    characterizer = NoiseCharacterizer(parallel=False, show_progress=False, representation="density_matrix")
+    results = [
+        characterizer.characterize(
+            Hamiltonian.ising(1, J=0.0, g=0.0),
+            params,
+            init_state=State(1),
+            init_guess=initial_model,
+            observables=observables,
+            ref_expectations=reference,
+            x_low=np.zeros(2),
+            x_up=np.full(2, 0.5),
+            max_iter=2,
+            popsize=4,
+            sigma0=0.04,
+            seed=seed,
+        )
+        for _ in range(2)
+    ]
+
+    assert results[0].loss_history
+    np.testing.assert_array_equal(results[0].loss_history, results[1].loss_history)
+    np.testing.assert_array_equal(results[0].best_parameters, results[1].best_parameters)
+    np.testing.assert_array_equal(results[0].fit_traj, results[1].fit_traj)
+    assert results[0].best_loss == results[1].best_loss
+
+
 def test_invalid_optimizer_bounds_fail_before_forward_model_setup(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bound-count mismatch fails before simulation or optimizer dispatch."""
     hamiltonian = Hamiltonian.ising(1, J=0.0, g=0.0)

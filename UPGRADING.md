@@ -6,6 +6,24 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+### Breaking: presets
+
+`SIMULATION_PRESETS` is now internal. Choose `preset="fast"`, `"balanced"`,
+`"accurate"`, or `"exact"` when constructing simulation parameters. Override
+individual settings through constructor arguments:
+
+```python
+from mqt.yaqs import AnalogSimParams
+
+params = AnalogSimParams(preset="accurate", evolution_mode="tdvp", max_bond_dim=256)
+```
+
+### Changed: process-pool defaults
+
+`mp_context="auto"` now selects `"forkserver"` on Linux and `"spawn"` on other
+platforms. Use an explicit `mp_context` when a specific start method is
+required. Setting `max_workers=1` keeps simulation work in the calling process.
+
 ### Breaking: physical sites use one spatial ordering
 
 YAQS now uses one public spatial dense-basis order. Site 0 is the
@@ -57,7 +75,7 @@ now uses that causal order too; it previously inherited the spatial MPO order.
 
 `Observable` now accepts a named Hermitian observable, a Hermitian matrix, or a
 binary bitstring. Observable instances expose `name`, `matrix`, `sites`,
-`interaction`, `kind`, and `bitstring` directly. They no longer accept
+`interaction`, `type`, and `bitstring` directly. They no longer accept
 `BaseGate` instances or the `gate=` keyword, and they no longer expose a `.gate`
 attribute. Named gate operations that are not Hermitian are no longer valid
 observables.
@@ -282,7 +300,7 @@ equiv = checker.check(circuit1, circuit2)  # auto matrix cutover defaults to 7 q
 | **State / Hamiltonian**  | Raw `MPS` / `MPO` passed to `run`                                 | `State` and `Hamiltonian` (set `representation` on `State`)                                                            |
 | **Observables**          | `Observable(Z(), sites=0)` via `gate_library`                     | `Observable("z", sites=0)` — also `"entropy"`, `"schmidt_spectrum"`, etc.                                              |
 | **Outputs**              | Written onto `*SimParams` / `Observable.results`                  | Read from `Result` (`expectation_values`, `counts`, `output_state`, …)                                                 |
-| **SVD truncation**       | `threshold` on `*SimParams`                                       | `svd_threshold` (presets use the same key in `SIMULATION_PRESETS`)                                                     |
+| **SVD truncation**       | `threshold` on `*SimParams`                                       | `svd_threshold`; select built-in settings with `preset=`                                                               |
 | **Execution UI**         | `show_progress` on `*SimParams`                                   | `show_progress` on `Simulator`; `num_threads` removed (unused)                                                         |
 | **Equivalence checking** | `digital.equivalence_checker.run(...)`                            | `EquivalenceChecker(...).check(...)`                                                                                   |
 | **Matrix auto cutover**  | `from mqt.yaqs import DEFAULT_MATRIX_MAX_QUBITS`                  | Default is **7** on `EquivalenceChecker(matrix_max_qubits=...)`; constant lives in `mqt.yaqs.equivalence_checker` only |
@@ -326,10 +344,12 @@ from mqt.yaqs import (
     Hamiltonian,
     MPO,
     MPS,
+    MemoryCharacterizer,
+    NoiseCharacterizer,
     NoiseModel,
     Observable,
     Result,
-    SIMULATION_PRESETS,
+    SimulationProgram,
     Simulator,
     State,
 )
