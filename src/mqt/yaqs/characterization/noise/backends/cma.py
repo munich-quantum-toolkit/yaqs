@@ -206,7 +206,7 @@ def cma_opt(
             SciPy can perform two evaluations even when ``max_iter=1``.
             Initial-model loss and final fitted-trajectory evaluation are
             outside this limit.
-        seed: Optional RNG seed forwarded to CMA-ES for reproducible runs.
+        seed: Optional non-negative RNG seed for reproducible runs, including zero.
 
     Returns:
         Best parameter vector, best loss, per-evaluation loss history, and
@@ -239,7 +239,12 @@ def cma_opt(
         "verb_disp": 0,
         "bounds": [np.asarray(x_low, dtype=float).tolist(), np.asarray(x_up, dtype=float).tolist()],
     }
-    if seed is not None:
+    if seed == 0:
+        # PyCMA reserves zero for fresh entropy. Use a local RNG and disable its seed handling.
+        rng = np.random.default_rng(seed)
+        options["randn"] = lambda *shape: rng.standard_normal(shape)
+        options["seed"] = np.nan
+    elif seed is not None:
         options["seed"] = seed
 
     es = cma.CMAEvolutionStrategy(
