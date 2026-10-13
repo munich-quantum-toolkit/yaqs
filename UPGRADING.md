@@ -6,6 +6,8 @@ of changes including minor and patch releases, please refer to the
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-13
+
 ### Breaking: presets
 
 `SIMULATION_PRESETS` is now internal. Choose `preset="fast"`, `"balanced"`,
@@ -230,7 +232,7 @@ MQT YAQS is again tested on Python 3.13 and 3.14. The optional Torch integration
 requires Torch 2.6 or later on Python 3.13 and Torch 2.9 or later on Python
 3.14.
 
-## [0.6.0]
+## [0.6.0] - 2026-07-07
 
 The unreleased API refresh replaces free functions and deep module paths with a
 small set of top-level types. The pieces fit together: construct physics objects

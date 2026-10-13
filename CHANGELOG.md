@@ -10,6 +10,8 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-13
+
 ### Added
 
 - hardened validation and release checks, removed legacy fallbacks ([#609])
@@ -290,7 +292,8 @@ for previous changelogs._
 
 <!-- Version links -->
 
-[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.7.0
 [0.6.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.6.0
 [0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
