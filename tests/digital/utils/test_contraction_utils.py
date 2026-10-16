@@ -31,6 +31,7 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
+from qiskit.quantum_info import Operator
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
@@ -47,6 +48,7 @@ from mqt.yaqs.digital.utils.contraction_utils import (
     update_mpo,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
+from tests.conftest import YAQS_TEST_SEED
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -186,6 +188,26 @@ def test_apply_two_qubit_gate(*, conjugate: bool) -> None:
     theta = random_theta_6d()
     updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
+
+
+@pytest.mark.parametrize("conjugate", [False, True])
+@pytest.mark.parametrize("qubits", [(0, 1), (1, 0)])
+def test_apply_two_qubit_gate_matches_dense_operator(*, qubits: tuple[int, int], conjugate: bool) -> None:
+    """``apply_gate`` matches the dense operator for either declared qubit order, with and without ``conjugate``."""
+    circuit = QuantumCircuit(2)
+    circuit.cu(1.1, 0.4, 0.9, 0.0, *qubits)  # U, U†, U^T and conj(U) all differ.
+    gate = convert_dag_to_tensor_algorithm(circuit_to_dag(circuit))[0]
+    unitary = np.asarray(Operator(circuit).data)
+
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    operator = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    # Index order of theta: out0, out1, left, in0, in1, right.
+    theta = operator.reshape(2, 2, 2, 2).transpose(1, 0, 3, 2)[:, :, None, :, :, None]
+
+    updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
+
+    expected = operator @ unitary.conj().T if conjugate else unitary @ operator
+    np.testing.assert_allclose(updated[:, :, 0, :, :, 0].transpose(1, 0, 3, 2).reshape(4, 4), expected, atol=1e-12)
 
 
 def test_apply_temporal_zone_no_op_nodes() -> None:

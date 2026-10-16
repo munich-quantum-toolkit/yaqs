@@ -20,7 +20,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit, transpile
-from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
+from qiskit.circuit.library import CRYGate, CYGate, ECRGate, U1Gate, U3Gate, UnitaryGate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
 from qiskit.quantum_info import Operator
@@ -39,6 +39,8 @@ from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qas
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from qiskit.circuit import Gate
 
     from mqt.yaqs.equivalence_checker import Representation
 
@@ -318,6 +320,42 @@ def test_matrix_backend_descending_cx_equivalence() -> None:
 
     assert EquivalenceChecker(representation="matrix").check(qa, qb)["equivalent"] is True
     assert EquivalenceChecker(representation="mpo").check(qa, qb)["equivalent"] is True
+
+
+# Gates with U != U^T whose two qubits play different roles.
+_ASYMMETRIC_GATES: dict[str, Gate] = {"cy": CYGate(), "cry": CRYGate(0.7), "ecr": ECRGate()}
+
+
+@pytest.mark.parametrize("representation", ["matrix", "mpo"])
+def test_swapped_control_and_target_of_cy_are_not_equivalent(representation: Literal["matrix", "mpo"]) -> None:
+    """``cy(1, 0)`` and ``cy(0, 1)`` are not equivalent, with overlap 1/4."""
+    qc1 = QuantumCircuit(2)
+    qc1.cy(1, 0)
+    qc2 = QuantumCircuit(2)
+    qc2.cy(0, 1)
+
+    result = EquivalenceChecker(representation=representation).check(qc1, qc2)
+
+    assert result["equivalent"] is False
+    assert result["fidelity"] == pytest.approx(0.25, abs=1e-12)
+
+
+@pytest.mark.parametrize("gate_name", sorted(_ASYMMETRIC_GATES))
+@pytest.mark.parametrize("qubits", [(1, 0), (2, 1)])
+def test_mpo_descending_gate_is_equivalent_to_its_ascending_unitary(gate_name: str, qubits: tuple[int, int]) -> None:
+    """A gate on descending qubits equals its ``UnitaryGate`` on the same qubits in ascending order."""
+    gate = _ASYMMETRIC_GATES[gate_name]
+    local = QuantumCircuit(2)
+    local.append(gate, [1, 0])
+    descending = QuantumCircuit(3)
+    descending.append(gate, qubits)
+    ascending = QuantumCircuit(3)
+    ascending.append(UnitaryGate(Operator(local)), sorted(qubits))
+
+    checker = EquivalenceChecker(representation="mpo")
+
+    assert checker.check(descending, ascending)["equivalent"] is True
+    assert checker.check(ascending, descending)["equivalent"] is True
 
 
 def test_equivalence_checker_matrix_backend_strips_measurements_once() -> None:
