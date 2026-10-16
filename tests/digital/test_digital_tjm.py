@@ -2194,6 +2194,24 @@ def test_shots_only_run_with_sample_layers_returns_counts(*, noisy: bool) -> Non
     assert result.max_bond is None
 
 
+def test_sample_layers_without_observables_records_bonds_only() -> None:
+    """A run without observables records bond dimensions and evaluates no observable."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.cx(0, 1)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    sim_params = DigitalSimParams(get_state=True, sample_layers=True)
+
+    with patch.object(MPS, "_evaluate_observables", autospec=True) as evaluate:
+        result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), qc, sim_params, None)
+
+    evaluate.assert_not_called()
+    assert result.max_bond is not None
+    # Bond dimension is 1 until the cx and 2 after it.
+    np.testing.assert_array_equal(result.max_bond, [1.0, 1.0, 2.0, 2.0])
+
+
 def test_shots_noiseless_get_state_returns_mps() -> None:
     """Noiseless shot simulation with ``get_state=True`` returns the final MPS."""
     qc = QuantumCircuit(2)

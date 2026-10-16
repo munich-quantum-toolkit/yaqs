@@ -816,7 +816,8 @@ def digital_tjm(
                 assert diagnostics is not None
                 assert results is not None
                 state._record_diagnostics(diagnostics, col_idx)  # ruff: ignore[private-member-access]
-                state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
+                if wants_obs:
+                    state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
 
     counts: dict[int, int] | None = None
     # The gate loop leaves the center on the last gate; returned states and following
