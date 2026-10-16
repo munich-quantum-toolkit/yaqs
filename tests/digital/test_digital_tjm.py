@@ -45,6 +45,7 @@ from mqt.yaqs.digital.digital_tjm import (
     process_layer,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+from tests.conftest import YAQS_TEST_SEED
 from tests.core.methods.tdvp.conftest import (
     HAAR_LR_FID_ABS,
     HAAR_LR_FID_FLOOR,
@@ -2171,6 +2172,26 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
         assert result.expectation_values[i] is not None
         # Only one labelled barrier -> 1 mid + initial + final
         assert result.expectation_values[i].shape == (3,)
+
+
+@pytest.mark.parametrize("noisy", [False, True])
+def test_shots_only_run_with_sample_layers_returns_counts(*, noisy: bool) -> None:
+    """A shots-only run with ``sample_layers`` returns its counts."""
+    qc = QuantumCircuit(2)
+    qc.x(0)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.cx(0, 1)
+    noise_model = (
+        NoiseModel([{"name": "pauli_z", "sites": [site], "strength": 0.5} for site in range(2)]) if noisy else None
+    )
+    sim_params = DigitalSimParams(shots=8, sample_layers=True, random_seed=YAQS_TEST_SEED)
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), qc, sim_params, noise_model)
+
+    # Z dephasing leaves |11> unchanged.
+    assert result.counts == {3: 8}
+    assert result.expectation_values == []
+    assert result.max_bond is None
 
 
 def test_shots_noiseless_get_state_returns_mps() -> None:
