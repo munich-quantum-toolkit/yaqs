@@ -10,6 +10,11 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- removed redundant tensor transposition from cx and cz ([#XXX])
+  ([**@Pouri96**])
+
 ### Fixed
 
 - fixed asymmetric two-qubit gate application in the MPO equivalence backend
@@ -308,6 +313,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#XXX]: https://github.com/munich-quantum-toolkit/yaqs/pull/XXX
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
