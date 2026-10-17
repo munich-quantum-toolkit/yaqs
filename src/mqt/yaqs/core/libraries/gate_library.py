@@ -924,8 +924,6 @@ class CX(BaseGate):
             np.array([[1, -1], [-1, 1]], dtype=np.complex128),
         ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
-        if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
-            self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CZ(BaseGate):
@@ -962,8 +960,6 @@ class CZ(BaseGate):
             np.array([[0, 0], [0, 2]], dtype=np.complex128),
         ]
         self.mpo_tensors = extend_gate(self.tensor, self.sites)
-        if self.sites[1] < self.sites[0]:  # Adjust for reverse control/target
-            self.tensor = np.transpose(self.tensor, (1, 0, 3, 2))
 
 
 class CCX(BaseGate):
