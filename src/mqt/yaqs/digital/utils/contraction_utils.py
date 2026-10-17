@@ -409,7 +409,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
         dag1: The first circuit's DAGCircuit.
         dag2: The second circuit's DAGCircuit.
         threshold: The SVD threshold for truncation.
-        conjugate: If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
+        conjugate: If True, apply the gate from dag2 as its adjoint; otherwise, from dag1.
     """
     dag_to_search = dag1 if not conjugate else dag2
 
@@ -441,7 +441,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     gate_ = convert_dag_to_tensor_algorithm(node)[0]
                     gate_mpo = MPO.from_gate(gate_, distance)
                     if conjugate:
-                        gate_mpo.rotate(conjugate=True)
+                        # The contraction below swaps the legs, so the plain conjugate gives the adjoint.
+                        gate_mpo.tensors = [np.conj(tensor) for tensor in gate_mpo.tensors]
                     dag.remove_op_node(node)
                     break
             break

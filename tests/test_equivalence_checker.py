@@ -20,7 +20,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit, transpile
-from qiskit.circuit.library import CRYGate, CYGate, ECRGate, U1Gate, U3Gate, UnitaryGate
+from qiskit.circuit.library import CRYGate, CUGate, CYGate, ECRGate, U1Gate, U3Gate, UnitaryGate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
 from qiskit.quantum_info import Operator
@@ -424,6 +424,62 @@ def test_matrix_and_mpo_return_same_relative_operator_orientation() -> None:
     assert mpo is not None
     np.testing.assert_allclose(matrix, expected, atol=1e-12)
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
+_LONG_RANGE_QUBITS = [(0, 2), (2, 0), (0, 3), (3, 0)]
+
+
+@pytest.mark.parametrize("gate_name", sorted(_ASYMMETRIC_GATES))
+@pytest.mark.parametrize("qubits", _LONG_RANGE_QUBITS)
+def test_mpo_long_range_gate_gives_dense_operator_in_either_circuit(gate_name: str, qubits: tuple[int, int]) -> None:
+    """A long-range gate gives the operator ``U`` as first circuit and ``U†`` as second circuit."""
+    circuit = QuantumCircuit(4)
+    circuit.append(_ASYMMETRIC_GATES[gate_name], qubits)
+    empty = QuantumCircuit(4)
+    unitary = np.asarray(Operator(circuit).data)
+    checker = EquivalenceChecker(representation="mpo")
+
+    first = checker.check(circuit, empty)["mpo"]
+    second = checker.check(empty, circuit)["mpo"]
+
+    assert first is not None
+    assert second is not None
+    np.testing.assert_allclose(first.to_matrix(), unitary, atol=1e-12)
+    np.testing.assert_allclose(second.to_matrix(), unitary.conj().T, atol=1e-12)
+
+
+@pytest.mark.parametrize("gate_name", sorted(_ASYMMETRIC_GATES))
+@pytest.mark.parametrize("qubits", _LONG_RANGE_QUBITS)
+def test_mpo_circuit_with_long_range_gate_is_equivalent_to_itself(gate_name: str, qubits: tuple[int, int]) -> None:
+    """A circuit with a long-range gate gives the identity against a copy of itself."""
+    circuit = QuantumCircuit(4)
+    circuit.append(_ASYMMETRIC_GATES[gate_name], qubits)
+
+    result = EquivalenceChecker(representation="mpo").check(circuit, circuit.copy())
+
+    assert result["equivalent"] is True
+    mpo = result["mpo"]
+    assert mpo is not None
+    np.testing.assert_allclose(mpo.to_matrix(), np.eye(2**4), atol=1e-12)
+
+
+def test_mpo_fidelity_does_not_depend_on_circuit_order() -> None:
+    """``check(a, b)`` and ``check(b, a)`` return the dense overlap of two non-commuting long-range gates."""
+    gate = CUGate(1.1, 0.4, 0.9, 0.0)
+    circuit_a = QuantumCircuit(5)
+    circuit_a.append(gate, [0, 2])
+    circuit_a.append(gate, [2, 4])
+    circuit_b = QuantumCircuit(5)
+    circuit_b.append(gate, [2, 4])
+    circuit_b.append(gate, [0, 2])
+    dense_overlap = abs(np.trace(Operator(circuit_a).data @ Operator(circuit_b).data.conj().T)) / 2**5
+    checker = EquivalenceChecker(representation="mpo")
+
+    forward = checker.check(circuit_a, circuit_b)["fidelity"]
+    backward = checker.check(circuit_b, circuit_a)["fidelity"]
+
+    assert forward == pytest.approx(backward, abs=1e-12)
+    assert forward == pytest.approx(dense_overlap, abs=1e-12)
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])

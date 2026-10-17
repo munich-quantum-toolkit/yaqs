@@ -328,6 +328,25 @@ def test_apply_long_range_layer() -> None:
     assert mpo.check_if_identity(1 - 1e-6), "MPO should approximate identity after long-range layer."
 
 
+@pytest.mark.parametrize("conjugate", [False, True])
+@pytest.mark.parametrize("qubits", [(0, 2), (2, 0), (0, 3), (3, 0)])
+def test_apply_long_range_layer_matches_dense_operator(*, qubits: tuple[int, int], conjugate: bool) -> None:
+    """A long-range gate gives ``U`` from the first circuit and ``U†`` from the second on the identity MPO."""
+    circuit = QuantumCircuit(4)
+    circuit.cu(1.1, 0.4, 0.9, 0.0, *qubits)  # U, U†, U^T and conj(U) all differ.
+    gate_dag = circuit_to_dag(circuit)
+    empty_dag = circuit_to_dag(QuantumCircuit(4))
+    unitary = np.asarray(Operator(circuit).data)
+
+    mpo = MPO.identity(4)
+    if conjugate:
+        apply_long_range_layer(mpo, empty_dag, gate_dag, conjugate=True, threshold=1e-12)
+    else:
+        apply_long_range_layer(mpo, gate_dag, empty_dag, conjugate=False, threshold=1e-12)
+
+    np.testing.assert_allclose(mpo.to_matrix(), unitary.conj().T if conjugate else unitary, atol=1e-12)
+
+
 def test_apply_long_range_layer_skips_leading_single_qubit_gate() -> None:
     """The first layer may begin with a single-qubit gate before a long-range CX."""
     mpo = MPO.identity(3)
