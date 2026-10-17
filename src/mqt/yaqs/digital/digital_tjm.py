@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import opt_einsum as oe
 from qiskit.converters import circuit_to_dag
 
+from ..core import linalg
 from ..core.data_structures.mpo import MPO
 from ..core.data_structures.mpo_utils import resolve_lr_tensor
 from ..core.data_structures.mps import MPS
@@ -32,7 +33,7 @@ from ..core.data_structures.result import _allocate_worker_observable_buffer
 from ..core.data_structures.state_utils import validate_qubit_measurement_dimensions
 from ..core.libraries.gate_library import BaseGate, GateLibrary
 from ..core.methods.decompositions import merge_two_site, split_two_site
-from ..core.methods.dissipation import apply_dissipation
+from ..core.methods.dissipation import apply_dissipation, is_longrange, is_pauli
 from ..core.methods.stochastic_process import stochastic_process
 from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fixed_chi
 from ..core.methods.tdvp.tdvp import evolve_window
@@ -326,6 +327,135 @@ def _renormalize(state: MPS) -> None:
             raise ValueError(msg)
         state.set_canonical_form(0, decomposition="QR")
     state.normalize_center()
+
+
+def _move_center(state: MPS, site: int) -> None:
+    """Move the orthogonality center to ``site`` with QR."""
+    if state.orthogonality_center is None:
+        state.set_canonical_form(site)
+    else:
+        state.shift_center_to(site)
+
+
+def _contract_at_center(state: MPS, matrix: NDArray[np.complex128], sites: Sequence[int]) -> NDArray[np.complex128]:
+    """Return ``matrix`` applied to the tensor of one site or of two adjacent sites, with the center on them."""
+    if len(sites) == 1:
+        _move_center(state, sites[0])
+        return oe.contract("ab, bcd->acd", matrix, state.tensors[sites[0]])
+    left, right = sites
+    if not state.check_covers_sites([left, right]):
+        center = state.orthogonality_center
+        _move_center(state, left if center is None or center < left else right)
+    return oe.contract("ab, bcd->acd", matrix, merge_two_site(state.tensors[left], state.tensors[right]))
+
+
+def _apply_at_center(
+    state: MPS, matrix: NDArray[np.complex128], sites: Sequence[int], sim_params: DigitalSimParams
+) -> None:
+    """Apply ``matrix`` on one site or two adjacent sites in place, splitting a pair with the configured truncation."""
+    block = _contract_at_center(state, matrix, sites)
+    if len(sites) == 1:
+        state.tensors[sites[0]] = block
+        return
+    left, right = sites
+    state.tensors[left], state.tensors[right] = split_two_site(
+        block,
+        [state.physical_dimensions[left], state.physical_dimensions[right]],
+        svd_distribution="right",
+        trunc_mode=sim_params.trunc_mode,
+        threshold=sim_params.svd_threshold,
+        max_bond_dim=sim_params.max_bond_dim,
+    )
+    state.update_center_after_split(left, right, "right")
+
+
+def _drop_null_directions(state: MPS, sites: Sequence[int]) -> None:
+    """Drop the zero bond directions a jump leaves, walking outward from ``sites`` while a bond shrinks."""
+    for edge, step, distribution in ((sites[0], -1, "left"), (sites[-1], 1, "right")):
+        state.shift_center_to(edge)
+        site = edge
+        while 0 <= site + step < state.length:
+            left = min(site, site + step)
+            bond = state.tensors[left].shape[2]
+            state.tensors[left], state.tensors[left + 1] = split_two_site(
+                merge_two_site(state.tensors[left], state.tensors[left + 1]),
+                [state.physical_dimensions[left], state.physical_dimensions[left + 1]],
+                svd_distribution=distribution,
+                trunc_mode="discarded_weight",
+                threshold=0.0,
+                max_bond_dim=None,
+            )
+            state.update_center_after_split(left, left + 1, distribution)
+            if state.tensors[left].shape[2] == bond:
+                break
+            site += step
+
+
+def _apply_local_noise(
+    state: MPS, noise_model: NoiseModel, sim_params: DigitalSimParams, rng: np.random.Generator
+) -> None:
+    """Apply the dissipation and one sampled jump of a gate-local noise model at the orthogonality center.
+
+    Raises:
+        ValueError: If the jump weights are zero or non-finite.
+    """
+    processes = noise_model.processes
+    if all(process["strength"] == 0 for process in processes):
+        _renormalize(state)
+        rng.random()
+        return
+
+    if state.orthogonality_center is None:
+        state.set_canonical_form(processes[0]["sites"][0])
+    groups: dict[tuple[int, ...], list[dict[str, Any]]] = {}
+    for process in processes:
+        groups.setdefault(tuple(process["sites"]), []).append(process)
+    pauli_rate = 0.0
+    # Same order as apply_dissipation: from the last site down, the one-site group before the pair that ends there.
+    for sites in sorted(groups, key=lambda key: (-key[-1], len(key))):
+        group = groups[sites]
+        if all(is_pauli(process) for process in group):
+            pauli_rate += sum(process["strength"] for process in group)
+            continue
+        if len(sites) == 2 and sites[1] - sites[0] > 1:
+            msg = "Non-Pauli Long-range processes are not implemented yet"
+            raise NotImplementedError(msg)
+        generator = sum(process["strength"] * (np.conj(process["matrix"]).T @ process["matrix"]) for process in group)
+        _apply_at_center(state, linalg.expm(-0.5 * generator), sites, sim_params)
+
+    # A Pauli group only scales the state, so it enters the jump probability and not the tensors.
+    norm_squared = float(state.norm(state.orthogonality_center) ** 2)
+    if rng.random() >= 1.0 - np.exp(-pauli_rate) * norm_squared:
+        state.normalize_center()
+        return
+
+    # Same order as create_probability_distribution: by first site, one-site channels first.
+    ordered = sorted(processes, key=lambda process: (process["sites"][0], len(process["sites"])))
+    weights: list[float] = []
+    for process in ordered:
+        weight = norm_squared
+        if not is_pauli(process):
+            block = _contract_at_center(state, process["matrix"], process["sites"])
+            weight = float(np.vdot(block, block).real)
+        weights.append(process["strength"] * weight)
+    total = float(np.sum(weights))
+    if not np.isfinite(total) or total <= 0.0:
+        msg = "Jump probability weights are zero or non-finite."
+        raise ValueError(msg)
+    process = ordered[rng.choice(len(ordered), p=[weight / total for weight in weights])]
+
+    sites = process["sites"]
+    pauli = is_pauli(process)
+    if pauli and (len(sites) == 1 or is_longrange(process)):
+        # A unitary on one physical leg keeps the gauge wherever it acts.
+        factors = process["factors"] if len(sites) == 2 else (process["matrix"],)
+        for site, factor in zip(sites, factors, strict=True):
+            state.tensors[site] = oe.contract("ab, bcd->acd", factor, state.tensors[site])
+    else:
+        _apply_at_center(state, process["matrix"], sites, sim_params)
+    state.normalize_center()
+    if not pauli:
+        _drop_null_directions(state, sites)
 
 
 def _apply_single_qubit_gate(state: MPS, gate: BaseGate) -> None:
@@ -804,8 +934,12 @@ def digital_tjm(
                     _renormalize(state)
                 else:
                     local_noise_model = create_local_noise_model(noise_model, gate.sites)
-                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+                    if sim_params.gate_mode in {"tdvp", "full-tdvp"}:
+                        # Localizing the noise step changes the results of the TDVP modes.
+                        apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+                        state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+                    else:
+                        _apply_local_noise(state, local_noise_model, sim_params, rng)
 
         if sim_params.sample_layers and layer.sample_points:
             # Bond-dimension diagnostics and the entropy observables read the tensors

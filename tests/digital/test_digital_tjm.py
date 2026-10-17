@@ -26,9 +26,9 @@ from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
 from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
-from mqt.yaqs.core.libraries.gate_library import CCX, GateLibrary, X
+from mqt.yaqs.core.libraries.gate_library import CCX, BaseGate, GateLibrary, X
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
-from mqt.yaqs.core.methods.stochastic_process import create_probability_distribution
+from mqt.yaqs.core.methods.stochastic_process import create_probability_distribution, stochastic_process
 from mqt.yaqs.core.methods.tdvp.sweep_utils import renorm_drift, uses_fixed_chi
 from mqt.yaqs.core.methods.tdvp.tdvp import evolve_window
 from mqt.yaqs.digital.digital_tjm import (
@@ -3169,6 +3169,224 @@ def test_jump_probabilities_match_dense() -> None:
     order = [(str(p["name"]), p["sites"][0]) for p in ordered]
     perm = [order.index((name, s)) for name, _, s, _ in _LAYER_PROCS]
     np.testing.assert_allclose(np.asarray(probs)[perm], dense, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# the noise step of a gate acts on the gate qubits only
+# ---------------------------------------------------------------------------
+
+
+class _Draws:
+    """Trajectory generator stand-in: draws ``0.0`` (jump on ``channel``) or ``1.0`` (no jump when ``None``)."""
+
+    def __init__(self, channel: int | None) -> None:
+        self.channel = channel
+        self.draws = 0
+        self.distributions: list[list[float]] = []
+
+    def random(self) -> float:
+        """Count a draw.
+
+        Returns:
+            ``0.0`` for a jump and ``1.0`` otherwise.
+        """
+        self.draws += 1
+        return 1.0 if self.channel is None else 0.0
+
+    def choice(self, size: int, p: list[float]) -> int:
+        """Record the channel distribution.
+
+        Returns:
+            The scripted channel, clipped to the number of channels.
+        """
+        self.distributions.append(list(p))
+        return min(self.channel or 0, size - 1)
+
+
+def _draws(channel: int | None) -> tuple[_Draws, np.random.Generator]:
+    """Return a scripted generator and the same object typed as the generator that the executor takes."""
+    draws = _Draws(channel)
+    return draws, cast("np.random.Generator", draws)
+
+
+def _per_qubit(name: str, strength: float = 0.3) -> list[dict[str, object]]:
+    """Return the one-site process ``name`` on each of the four qubits."""
+    return [{"name": name, "sites": [qubit], "strength": strength} for qubit in range(4)]
+
+
+_NON_NORMAL = np.array(
+    [[0.2, 0.5, 0.0, 0.1j], [0.0, 0.3, 0.4, 0.0], [0.1, 0.0, 0.2, 0.6], [0.3j, 0.0, 0.0, 0.1]], dtype=np.complex128
+)
+_NOISE_STEP_CASES = {
+    "non-pauli-one-site": ([*_per_qubit("lowering"), *_per_qubit("pauli_z", 0.2)], [1, 2]),
+    "pauli-adjacent": ([*_per_qubit("pauli_x"), {"name": "crosstalk_zz", "sites": [1, 2], "strength": 0.2}], [1, 2]),
+    "non-pauli-adjacent": (
+        [
+            *_per_qubit("lowering"),
+            {"name": "lowering_two", "sites": [1, 2], "strength": 0.25},
+            {"name": "non_normal", "sites": [1, 2], "strength": 0.2, "matrix": _NON_NORMAL},
+        ],
+        [1, 2],
+    ),
+    "three-qubit": (
+        [
+            *_per_qubit("lowering"),
+            {"name": "crosstalk_xx", "sites": [0, 1], "strength": 0.2},
+            {"name": "longrange_crosstalk_zz", "sites": [1, 3], "strength": 0.2},
+        ],
+        [0, 1, 3],
+    ),
+}
+
+
+@pytest.mark.parametrize("channel", [None, 0, 1, 2])
+@pytest.mark.parametrize("case", list(_NOISE_STEP_CASES))
+def test_noisy_gate_matches_dissipation_and_jump_of_the_local_noise_model(case: str, channel: int | None) -> None:
+    """A noisy gate equals ``apply_dissipation`` and ``stochastic_process`` on its local noise model."""
+    processes, gate_qubits = _NOISE_STEP_CASES[case]
+    qc = QuantumCircuit(4)
+    for qubit, theta in enumerate([1.9, 2.1, 0.9, 1.3]):
+        qc.ry(theta, qubit)
+    if len(gate_qubits) == 2:
+        qc.cx(gate_qubits[0], gate_qubits[1])
+    else:
+        qc.ccx(gate_qubits[0], gate_qubits[1], gate_qubits[2])
+    noise_model = NoiseModel(processes)
+    sim_params = DigitalSimParams(get_state=True, preset="exact")
+
+    draws, rng = _draws(channel)
+    _, _, _, state = digital_tjm((0, MPS(4, state="zeros"), noise_model, sim_params, qc), rng=rng)
+    _, _, _, reference = digital_tjm((0, MPS(4, state="zeros"), None, sim_params, qc))
+    assert state is not None
+    assert reference is not None
+    expected_draws, expected_rng = _draws(channel)
+    local_noise_model = create_local_noise_model(noise_model, gate_qubits)
+    apply_dissipation(reference, local_noise_model, dt=1, sim_params=sim_params)
+    stochastic_process(reference, local_noise_model, dt=1, sim_params=sim_params, rng=expected_rng)
+
+    assert _fidelity(reference.to_vec(), state.to_vec()) == pytest.approx(1.0, abs=1e-12)
+    assert draws.draws == expected_draws.draws
+    np.testing.assert_allclose(draws.distributions, expected_draws.distributions, atol=1e-12)
+
+
+@pytest.mark.parametrize("channel", [None, 0, 1, 2, 3])
+def test_noisy_ccx_matches_dense_dissipation_and_jump(channel: int | None) -> None:
+    """The noisy CCX equals the dense dissipation ``expm(-H/2)`` and the dense jump of the chosen channel."""
+    qc = QuantumCircuit(3)
+    for qubit, theta in enumerate([1.9, 2.1, 0.9]):
+        qc.ry(theta, qubit)
+    qc.ccx(0, 1, 2)
+    h_eff = sum(g * (_embed_le(mat, s, 3).conj().T @ _embed_le(mat, s, 3)) for _, mat, s, g in _LAYER_PROCS)
+    expected = expm(-0.5 * h_eff) @ Statevector(qc).data
+    # Jump channels in sampling order, X on site 0 and Z on site 2 for the long-range pair.
+    jumps = [_embed_le(mat, s, 3) for _, mat, s, _ in _LAYER_PROCS]
+    jumps.insert(1, _embed_le(Pauli("X").to_matrix(), 0, 3) @ _embed_le(PAULI_Z_MAT, 2, 3))
+    if channel is not None:
+        expected = jumps[channel] @ expected
+    processes = [{"name": name, "sites": [s], "strength": g} for name, _, s, g in _LAYER_PROCS]
+    noise_model = NoiseModel([*processes, {"name": "longrange_crosstalk_xz", "sites": [0, 2], "strength": 0.1}])
+    sim_params = DigitalSimParams(get_state=True, preset="exact")
+
+    _, _, _, state = digital_tjm((0, MPS(3, state="zeros"), noise_model, sim_params, qc), rng=_draws(channel)[1])
+
+    assert state is not None
+    assert _fidelity(expected / np.linalg.norm(expected), state.to_vec()) == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("channel", [None, 0])
+@pytest.mark.parametrize(("svd_threshold", "max_bond_dim"), [(1e-2, None), (None, 2)], ids=["threshold", "cap"])
+def test_noisy_gate_splits_the_noise_pair_with_the_configured_truncation(
+    svd_threshold: float | None, max_bond_dim: int | None, channel: int | None
+) -> None:
+    """The pair split of an adjacent two-site noise process uses the configured truncation."""
+    qc = QuantumCircuit(6)
+    qc.cx(2, 3)
+    noise_model = NoiseModel([{"name": "lowering_two", "sites": [2, 3], "strength": 0.5}])
+    sim_params = DigitalSimParams(
+        get_state=True, preset="exact", svd_threshold=svd_threshold, max_bond_dim=max_bond_dim
+    )
+    initial = _random_capped_mps(6, 4, seed=5)
+
+    _, _, _, state = digital_tjm((0, copy.deepcopy(initial), noise_model, sim_params, qc), rng=_draws(channel)[1])
+    _, _, _, reference = digital_tjm((0, copy.deepcopy(initial), None, sim_params, qc))
+    assert state is not None
+    assert reference is not None
+    local_noise_model = create_local_noise_model(noise_model, [2, 3])
+    apply_dissipation(reference, local_noise_model, dt=1, sim_params=sim_params)
+    stochastic_process(reference, local_noise_model, dt=1, sim_params=sim_params, rng=_draws(channel)[1])
+
+    assert state.bond_dimensions() == reference.bond_dimensions()
+    assert _fidelity(reference.to_vec(), state.to_vec()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_non_pauli_jump_drops_the_zero_directions_it_leaves() -> None:
+    """A lowering jump turns a GHZ state into a product state, so every bond shrinks to one."""
+    qc = QuantumCircuit(4)
+    qc.h(0)
+    for qubit in range(3):
+        qc.cx(qubit, qubit + 1)
+    noise_model = NoiseModel([{"name": "lowering", "sites": [3], "strength": 0.3}])
+    sim_params = DigitalSimParams(get_state=True, preset="exact")
+
+    _, _, _, state = digital_tjm((0, MPS(4, state="zeros"), noise_model, sim_params, qc), rng=_draws(0)[1])
+
+    assert state is not None
+    assert state.bond_dimensions() == [1, 1, 1]
+
+
+def test_noise_step_draws_once_per_gate_and_once_more_per_jump() -> None:
+    """Every gate on two qubits draws once, also with an empty local noise model, and a jump draws a channel."""
+    qc = QuantumCircuit(4)
+    qc.cx(0, 1)
+    qc.cx(2, 3)
+    qc.cx(1, 2)
+    noise_model = NoiseModel(_per_qubit("pauli_x")[:2])
+    sim_params = DigitalSimParams(get_state=True, preset="exact")
+    draws, rng = _draws(0)
+    digital_tjm((0, MPS(4, state="zeros"), noise_model, sim_params, qc), rng=rng)
+    assert draws.draws == 3
+    assert len(draws.distributions) == 2
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+@pytest.mark.parametrize(
+    ("name", "channel", "max_bond_dim"),
+    [
+        ("pauli_x", None, None),
+        ("pauli_x", 0, None),
+        ("lowering", None, None),
+        ("lowering", 0, None),
+        # A cap of one makes every gate discard weight, except that forced lowering jumps need the uncapped state.
+        ("pauli_x", None, 1),
+        ("pauli_x", 0, 1),
+        ("lowering", None, 1),
+    ],
+)
+def test_noisy_gate_hands_a_unit_state_with_a_valid_center_to_the_next_gate(
+    gate_mode: GateMode, name: str, channel: int | None, max_bond_dim: int | None
+) -> None:
+    """The state that follows a noisy gate has unit norm and a tracked center that is a canonical center."""
+    qc = QuantumCircuit(6)
+    for qubit in range(6):
+        qc.ry(0.4 + 0.3 * qubit, qubit)
+    for control, target in ((0, 1), (3, 4), (1, 3), (4, 5)):
+        qc.cx(control, target)
+    noise_model = NoiseModel([{"name": name, "sites": [qubit], "strength": 0.2} for qubit in range(6)])
+    sim_params = DigitalSimParams(get_state=True, preset="exact", max_bond_dim=max_bond_dim, gate_mode=gate_mode)
+    handed_over: list[tuple[float, int | None, list[int]]] = []
+    apply_gate = digital_module._apply_two_qubit_gate  # ruff: ignore[private-member-access]
+
+    def record(state: MPS, gate: BaseGate, params: DigitalSimParams) -> tuple[int, int]:
+        handed_over.append((float(state.norm()), state.orthogonality_center, state.check_canonical_form()))
+        return apply_gate(state, gate, params)
+
+    with patch.object(digital_module, "_apply_two_qubit_gate", side_effect=record):
+        digital_tjm((0, MPS(6, state="zeros"), noise_model, sim_params, qc), rng=_draws(channel)[1])
+
+    assert len(handed_over) == 4
+    for norm, center, canonical in handed_over[1:]:
+        assert norm == pytest.approx(1.0, abs=1e-12)
+        assert center is None or center in canonical
 
 
 # ---------------------------------------------------------------------------
