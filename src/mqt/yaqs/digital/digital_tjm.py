@@ -233,7 +233,6 @@ def process_layer(dag: DAGCircuit) -> tuple[list[DAGOpNode], list[DAGOpNode], li
         else:
             odd_nodes.append(node)
 
-    # Sort the nodes to minimize orthogonality center movement (zig-zag optimization)
     single_qubit_nodes.sort(key=lambda node: dag.find_bit(node.qargs[0]).index)
     even_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
     odd_nodes.sort(key=lambda node: min(dag.find_bit(qubit).index for qubit in node.qargs))
@@ -528,10 +527,11 @@ def apply_two_qubit_gate_tebd(
 
     # The truncated split below is optimal only if the orthogonality center lies on
     # the gate pair; establish that gauge first (cf. apply_window and MPS.compress).
-    if state.orthogonality_center is None:
+    center = state.orthogonality_center
+    if center is None:
         state.set_canonical_form(left_site)
-    elif state.orthogonality_center not in {left_site, right_site}:
-        state.shift_center_to(left_site)
+    elif center not in {left_site, right_site}:
+        state.shift_center_to(left_site if center < left_site else right_site)
 
     left_tensor = state.tensors[left_site]
     right_tensor = state.tensors[right_site]
@@ -604,7 +604,13 @@ def apply_long_range_gate_mpo(
     return first_site, last_site
 
 
-def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimParams) -> tuple[int, int]:
+def _apply_two_qubit_gate(
+    state: MPS,
+    gate: BaseGate,
+    sim_params: DigitalSimParams,
+    *,
+    svd_distribution: SvdDistribution = "right",
+) -> tuple[int, int]:
     """Apply one translated gate on two or more qubits using the configured mode.
 
     Two-qubit gates are routed by ``gate_mode`` exactly as before. Gates on three or
@@ -616,6 +622,7 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
         state: MPS updated in place.
         gate: Executor-owned translated gate.
         sim_params: Simulation parameters including ``gate_mode``.
+        svd_distribution: Side receiving the center after a nearest-neighbor split.
 
     Returns:
         First and last affected MPS sites.
@@ -644,22 +651,22 @@ def _apply_two_qubit_gate(state: MPS, gate: BaseGate, sim_params: DigitalSimPara
         if has_generator:
             return apply_two_qubit_gate_tdvp(state, gate, sim_params)
         if is_nearest_neighbor:
-            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+            return apply_two_qubit_gate_tebd(state, gate, sim_params, svd_distribution=svd_distribution)
         return apply_long_range_gate_mpo(state, gate, sim_params)
 
     if gate_mode == "swaps":
-        return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_two_qubit_gate_tebd(state, gate, sim_params, svd_distribution=svd_distribution)
 
     if gate_mode == "tdvp":
         if is_nearest_neighbor:
-            return apply_two_qubit_gate_tebd(state, gate, sim_params)
+            return apply_two_qubit_gate_tebd(state, gate, sim_params, svd_distribution=svd_distribution)
         if has_generator:
             return apply_two_qubit_gate_tdvp(state, gate, sim_params)
         return apply_long_range_gate_mpo(state, gate, sim_params)
 
     # The remaining mode is mpo: TEBD for nearest neighbors, gate MPO otherwise.
     if is_nearest_neighbor:
-        return apply_two_qubit_gate_tebd(state, gate, sim_params)
+        return apply_two_qubit_gate_tebd(state, gate, sim_params, svd_distribution=svd_distribution)
     return apply_long_range_gate_mpo(state, gate, sim_params)
 
 
@@ -678,6 +685,19 @@ def apply_two_qubit_gate(state: MPS, node: DAGOpNode, sim_params: DigitalSimPara
     gate = convert_dag_to_tensor_algorithm(node)[0]
     _validate_gate_layout(gate, tuple(state.physical_dimensions), sim_params.gate_mode)
     return _apply_two_qubit_gate(state, gate, sim_params)
+
+
+def _layer_sweep(layer: _CompiledCircuitLayer, center: int | None) -> tuple[tuple[BaseGate, ...], SvdDistribution]:
+    """Return a layer's gates in sweep order and the SVD distribution for the sweep direction."""
+    gates = tuple(sorted((*layer.even_two_qubit_gates, *layer.odd_two_qubit_gates), key=lambda gate: min(gate.sites)))
+    if center is None or not gates:
+        return gates, "right"
+    first, last = gates[0], gates[-1]
+    gap_to_first = max(min(first.sites) - center, center - max(first.sites), 0)
+    gap_to_last = max(min(last.sites) - center, center - max(last.sites), 0)
+    if gap_to_last < gap_to_first:
+        return gates[::-1], "left"
+    return gates, "right"
 
 
 def _per_call_shots(sim_params: DigitalSimParams, traj_idx: int = 0) -> int:
@@ -796,16 +816,20 @@ def digital_tjm(
         for gate in layer.single_qubit_gates:
             _apply_single_qubit_gate(state, gate)
 
-        for group in (layer.even_two_qubit_gates, layer.odd_two_qubit_gates):
-            for gate in group:
-                _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params)
+        if noisy:
+            # Noisy runs keep the stored order, because each noise step recenters at site 0.
+            two_qubit_gates, svd_distribution = (*layer.even_two_qubit_gates, *layer.odd_two_qubit_gates), "right"
+        else:
+            two_qubit_gates, svd_distribution = _layer_sweep(layer, state.orthogonality_center)
+        for gate in two_qubit_gates:
+            _first_site, _last_site = _apply_two_qubit_gate(state, gate, sim_params, svd_distribution=svd_distribution)
 
-                if not noisy:
-                    _renormalize(state)
-                else:
-                    local_noise_model = create_local_noise_model(noise_model, gate.sites)
-                    apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
-                    state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
+            if not noisy:
+                _renormalize(state)
+            else:
+                local_noise_model = create_local_noise_model(noise_model, gate.sites)
+                apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
+                state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
         if sim_params.sample_layers and layer.sample_points:
             # Bond-dimension diagnostics and the entropy observables read the tensors
