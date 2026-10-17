@@ -20,6 +20,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit, transpile
+from qiskit.circuit import QuantumRegister, Qubit
 from qiskit.circuit.library import ECRGate, U1Gate, U3Gate
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
@@ -28,7 +29,7 @@ from qiskit.quantum_info import Operator
 import mqt.yaqs.equivalence_checker as equivalence_checker_module
 from mqt.yaqs import EquivalenceChecker, NoiseModel
 from mqt.yaqs.core.libraries.gate_library import GateLibrary
-from mqt.yaqs.digital.utils import matrix_utils
+from mqt.yaqs.digital.utils import contraction_utils, matrix_utils
 from mqt.yaqs.digital.utils.contraction_utils import MIN_QUBITS_FOR_MPO_PARALLEL
 from mqt.yaqs.digital.utils.dag_utils import (
     SUPPORTED_QISKIT_GATE_NAMES,
@@ -38,7 +39,10 @@ from mqt.yaqs.equivalence_checker import DEFAULT_MATRIX_MAX_QUBITS
 from tests.conftest import LARGE_QASM2_STRING, SAMPLE_QASM3_STRING, requires_qasm3_import, write_qasm_file
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    from qiskit.dagcircuit import DAGCircuit
 
     from mqt.yaqs.equivalence_checker import Representation
 
@@ -386,6 +390,126 @@ def test_matrix_and_mpo_return_same_relative_operator_orientation() -> None:
     assert mpo is not None
     np.testing.assert_allclose(matrix, expected, atol=1e-12)
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
+
+
+def _two_register_circuit() -> QuantumCircuit:
+    """Return an empty circuit with the registers ``a`` and ``b`` of two qubits each."""
+    return QuantumCircuit(QuantumRegister(2, "a"), QuantumRegister(2, "b"))
+
+
+def _different_register_pair() -> tuple[QuantumCircuit, QuantumCircuit]:
+    """Return ``x(a[1])`` and ``x(b[1])``, which act on different qubits."""
+    first = _two_register_circuit()
+    first.x(first.qubits[1])
+    second = _two_register_circuit()
+    second.x(second.qubits[3])
+    return first, second
+
+
+def _register_twin_pair() -> tuple[QuantumCircuit, QuantumCircuit]:
+    """Return a circuit on two registers and the same circuit on one register."""
+    registers = QuantumCircuit(QuantumRegister(3, "a"), QuantumRegister(1, "b"))
+    flat = QuantumCircuit(4)
+    for circuit in (registers, flat):
+        circuit.cx(circuit.qubits[2], circuit.qubits[3])
+        circuit.h(circuit.qubits[1])
+        circuit.cx(circuit.qubits[1], circuit.qubits[2])
+        circuit.rz(0.3, circuit.qubits[0])
+    return registers, flat
+
+
+def _register_less_pair() -> tuple[QuantumCircuit, QuantumCircuit]:
+    """Return a circuit without registers and the same circuit on one register."""
+    bare = QuantumCircuit([Qubit() for _ in range(4)])
+    flat = QuantumCircuit(4)
+    for circuit in (bare, flat):
+        circuit.cx(circuit.qubits[0], circuit.qubits[1])
+        circuit.h(circuit.qubits[2])
+        circuit.cx(circuit.qubits[1], circuit.qubits[2])
+        circuit.rz(0.3, circuit.qubits[3])
+    return bare, flat
+
+
+@pytest.mark.parametrize("representation", ["matrix", "mpo"])
+@pytest.mark.parametrize(
+    ("make_pair", "equivalent"),
+    [
+        pytest.param(_different_register_pair, False, id="different-registers"),
+        pytest.param(_register_twin_pair, True, id="register-twin"),
+        pytest.param(_register_less_pair, True, id="register-less-twin"),
+    ],
+)
+def test_relative_operator_follows_circuit_positions_across_registers(
+    make_pair: Callable[[], tuple[QuantumCircuit, QuantumCircuit]],
+    *,
+    equivalent: bool,
+    representation: Literal["matrix", "mpo"],
+) -> None:
+    """Both backends match the dense operator when a circuit has several registers or none."""
+    circuit1, circuit2 = make_pair()
+    unitary1 = np.asarray(Operator(circuit1).data, dtype=np.complex128)
+    unitary2 = np.asarray(Operator(circuit2).data, dtype=np.complex128)
+    expected = unitary1 @ unitary2.conj().T
+
+    result = EquivalenceChecker(
+        threshold=1e-13, fidelity=1 - 1e-13, representation=representation, parallel=False
+    ).check(circuit1, circuit2)
+
+    mpo = result["mpo"]
+    operator = result["matrix"] if mpo is None else mpo.to_matrix()
+    assert operator is not None
+    np.testing.assert_allclose(operator, expected, atol=1e-12)
+    assert result["equivalent"] is equivalent
+
+
+def _far_register_gate_circuit() -> QuantumCircuit:
+    """Return ``cx(a[0], b[1])``, a gate over four sites."""
+    circuit = _two_register_circuit()
+    circuit.cx(circuit.qubits[0], circuit.qubits[3])
+    return circuit
+
+
+def _colliding_register_indices_circuit() -> QuantumCircuit:
+    """Return two gates whose qubits have the same indices within their registers."""
+    circuit = QuantumCircuit(QuantumRegister(2, "a"), QuantumRegister(2, "b"), QuantumRegister(2, "c"))
+    circuit.cx(circuit.qubits[0], circuit.qubits[1])
+    circuit.cx(circuit.qubits[2], circuit.qubits[5])
+    return circuit
+
+
+@pytest.mark.parametrize(
+    ("make_circuit", "fidelity"),
+    [
+        # Tr(CX) = 2 on two qubits, so CX with two idle qubits has the trace 2 * 2**2 = 8, over 2**4.
+        pytest.param(_far_register_gate_circuit, 8 / 16, id="two-registers"),
+        # Two CX and two idle qubits have the trace 2 * 2 * 2**2 = 16, over 2**6.
+        pytest.param(_colliding_register_indices_circuit, 16 / 64, id="colliding-register-indices"),
+    ],
+)
+def test_mpo_backend_applies_long_range_gates_between_registers(
+    make_circuit: Callable[[], QuantumCircuit], fidelity: float
+) -> None:
+    """The MPO backend applies a gate between registers as a long-range gate."""
+    circuit = make_circuit()
+    original_apply_layer = cast("Callable[..., None]", contraction_utils.apply_layer)
+
+    def sweep_over_neighbors(mpo: object, dag1: DAGCircuit, dag2: DAGCircuit, *args: object, **kwargs: object) -> None:
+        """Run the nearest-neighbor sweep only if no long-range gate is in the first layers."""
+        for dag in (dag1, dag2):
+            for node in dag.front_layer():
+                sites = [dag.find_bit(qubit).index for qubit in node.qargs]
+                assert max(sites) - min(sites) <= 1, "long-range gate in the nearest-neighbor sweep"
+        original_apply_layer(mpo, dag1, dag2, *args, **kwargs)
+
+    checker = EquivalenceChecker(threshold=1e-13, fidelity=1 - 1e-13, representation="mpo", parallel=False)
+
+    with patch.object(contraction_utils, "apply_layer", sweep_over_neighbors):
+        result = checker.check(circuit, circuit.copy_empty_like())
+
+    mpo = result["mpo"]
+    assert mpo is not None
+    np.testing.assert_allclose(mpo.to_matrix(), Operator(circuit).data, atol=1e-12)
+    assert result["fidelity"] == pytest.approx(fidelity, abs=1e-12)
 
 
 @pytest.mark.parametrize("representation", ["matrix", "mpo"])
