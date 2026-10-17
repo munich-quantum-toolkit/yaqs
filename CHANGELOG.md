@@ -10,6 +10,11 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- swept circuit layers in alternating directions to cut center moves ([#647])
+  ([**@Pouri96**])
+
 ## [0.7.0] - 2026-10-13
 
 ### Added
@@ -303,6 +308,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#647]: https://github.com/munich-quantum-toolkit/yaqs/pull/647
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
 [#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623
