@@ -109,7 +109,7 @@ packages = [ "src/mqt" ]
 
 
 [tool.uv]
-required-version = ">=0.13.4"
+required-version = ">=0.5.20"
 
 [tool.uv.sources]
 mqt-yaqs = { workspace = true }
