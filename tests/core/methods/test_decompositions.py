@@ -239,7 +239,7 @@ def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) 
     u = _rand_unitary_like(m, r, seed=seed)
     v = _rand_unitary_like(n, r, seed=seed + 1)
     sigma = np.diag(s[:r].astype(np.complex128))
-    return cast("NDArray[np.complex128]", (u @ sigma @ v.conj().T).astype(np.complex128, copy=False))
+    return (u @ sigma @ v.conj().T).astype(np.complex128, copy=False)
 
 
 def _as_merged_two_site(
