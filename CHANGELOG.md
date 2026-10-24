@@ -10,6 +10,11 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed asymmetric two-qubit gate application in the MPO equivalence backend
+  ([#645]) ([**@Pouri96**])
+
 ## [0.7.0] - 2026-10-13
 
 _If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#070)._
@@ -307,6 +312,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
 [#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623

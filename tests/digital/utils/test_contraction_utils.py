@@ -31,6 +31,7 @@ import numpy as np
 import pytest
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag
+from qiskit.quantum_info import Operator
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mpo_utils import decompose_theta
@@ -47,6 +48,7 @@ from mqt.yaqs.digital.utils.contraction_utils import (
     update_mpo,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm, get_temporal_zone, select_starting_point
+from tests.conftest import YAQS_TEST_SEED
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -188,6 +190,26 @@ def test_apply_two_qubit_gate(*, conjugate: bool) -> None:
     assert updated.shape == theta.shape, "Shape should remain consistent after apply_gate."
 
 
+@pytest.mark.parametrize("conjugate", [False, True])
+@pytest.mark.parametrize("qubits", [(0, 1), (1, 0)])
+def test_apply_two_qubit_gate_matches_dense_operator(*, qubits: tuple[int, int], conjugate: bool) -> None:
+    """``apply_gate`` matches the dense operator for either declared qubit order, with and without ``conjugate``."""
+    circuit = QuantumCircuit(2)
+    circuit.cu(1.1, 0.4, 0.9, 0.0, *qubits)  # U, U†, U^T and conj(U) all differ.
+    gate = convert_dag_to_tensor_algorithm(circuit_to_dag(circuit))[0]
+    unitary = np.asarray(Operator(circuit).data)
+
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    operator = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    # Index order of theta: out0, out1, left, in0, in1, right.
+    theta = operator.reshape(2, 2, 2, 2).transpose(1, 0, 3, 2)[:, :, None, :, :, None]
+
+    updated = apply_gate(gate, theta, site0=0, site1=1, conjugate=conjugate)
+
+    expected = operator @ unitary.conj().T if conjugate else unitary @ operator
+    np.testing.assert_allclose(updated[:, :, 0, :, :, 0].transpose(1, 0, 3, 2).reshape(4, 4), expected, atol=1e-12)
+
+
 def test_apply_temporal_zone_no_op_nodes() -> None:
     """Test that apply_temporal_zone returns the original tensor when there are no operation nodes in the DAG.
 
@@ -304,6 +326,25 @@ def test_apply_long_range_layer() -> None:
     apply_long_range_layer(mpo, dag1, dag2, conjugate=True, threshold=threshold)
 
     assert mpo.check_if_identity(1 - 1e-6), "MPO should approximate identity after long-range layer."
+
+
+@pytest.mark.parametrize("conjugate", [False, True])
+@pytest.mark.parametrize("qubits", [(0, 2), (2, 0), (0, 3), (3, 0)])
+def test_apply_long_range_layer_matches_dense_operator(*, qubits: tuple[int, int], conjugate: bool) -> None:
+    """A long-range gate gives ``U`` from the first circuit and ``U†`` from the second on the identity MPO."""
+    circuit = QuantumCircuit(4)
+    circuit.cu(1.1, 0.4, 0.9, 0.0, *qubits)  # U, U†, U^T and conj(U) all differ.
+    gate_dag = circuit_to_dag(circuit)
+    empty_dag = circuit_to_dag(QuantumCircuit(4))
+    unitary = np.asarray(Operator(circuit).data)
+
+    mpo = MPO.identity(4)
+    if conjugate:
+        apply_long_range_layer(mpo, empty_dag, gate_dag, conjugate=True, threshold=1e-12)
+    else:
+        apply_long_range_layer(mpo, gate_dag, empty_dag, conjugate=False, threshold=1e-12)
+
+    np.testing.assert_allclose(mpo.to_matrix(), unitary.conj().T if conjugate else unitary, atol=1e-12)
 
 
 def test_apply_long_range_layer_skips_leading_single_qubit_gate() -> None:
