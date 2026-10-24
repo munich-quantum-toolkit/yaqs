@@ -68,7 +68,7 @@ jobs:
   docs-check:
     name: 📚 Documentation
     needs: docs-execute
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -87,7 +87,7 @@ jobs:
 
   docs-execute:
     name: 📊 Documentation examples
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
