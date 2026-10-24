@@ -533,6 +533,7 @@ def test_gate_cx() -> None:
       - The sites attribute is correctly set.
       - The tensor is reshaped to (2,2,2,2).
       - An MPO has been constructed and contains at least two tensors.
+      - The tensor of a reversed gate keeps the order of the declared sites.
     """
     gate = GateLibrary.cx()
     gate.set_sites(0, 1)
@@ -542,6 +543,10 @@ def test_gate_cx() -> None:
     assert isinstance(gate.mpo_tensors, list)
     assert len(gate.mpo_tensors) >= 2
 
+    gate_rev = GateLibrary.cx()
+    gate_rev.set_sites(1, 0)
+    assert_array_equal(gate_rev.tensor, gate_rev.matrix.reshape(2, 2, 2, 2))
+
     base_gate = BaseGate.cx()
     assert_array_equal(gate.matrix, base_gate.matrix)
 
@@ -550,21 +555,14 @@ def test_gate_cx() -> None:
 
 
 def test_gate_cz() -> None:
-    """Test the CZ (controlled-Z) gate from GateLibrary.
-
-    This test sets a CZ gate in forward order and then in reverse order,
-    verifying that in the reverse order the tensor is the transpose (axes (1,0,3,2)) of the forward tensor.
-    """
+    """Test the CZ (controlled-Z) gate from GateLibrary."""
     # Forward order
     gate = GateLibrary.cz()
     gate.set_sites(0, 1)
-    tensor_forward = gate.tensor.copy()
     assert gate.sites == [0, 1]
-    # Reverse order: tensor should be transposed on axes (1,0,3,2)
     gate_rev = GateLibrary.cz()
     gate_rev.set_sites(1, 0)
-    expected = np.transpose(tensor_forward, (1, 0, 3, 2))
-    np.testing.assert_allclose(gate_rev.tensor, expected)
+    assert_array_equal(gate_rev.tensor, gate_rev.matrix.reshape(2, 2, 2, 2))
 
     base_gate = BaseGate.cz()
     assert_array_equal(gate.matrix, base_gate.matrix)
@@ -722,17 +720,12 @@ def test_gate_cphase_forward() -> None:
 
 
 def test_gate_cphase_reverse() -> None:
-    """Test the reverse order of the CPhase gate from GateLibrary.
-
-    This test sets the parameters for a CPhase gate and sets the sites in reverse order.
-    It then verifies that the tensor is correctly transposed (axes (1,0,3,2)) relative to the forward order.
-    """
+    """A reversed CPhase gate keeps the tensor of the declared order."""
     theta = np.pi / 2
     gate = GateLibrary.cp([theta])
-    gate.set_sites(1, 0)  # Reverse order; tensor should be transposed on (1,0,3,2)
+    gate.set_sites(1, 0)  # Reverse order
     expected: NDArray[np.complex128] = np.reshape(gate.matrix, (2, 2, 2, 2))
-    expected = np.transpose(expected, (1, 0, 3, 2))
-    assert_allclose(gate.tensor, expected)
+    assert_array_equal(gate.tensor, expected)
 
 
 def test_gate_constructor() -> None:
