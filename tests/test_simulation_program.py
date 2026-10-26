@@ -882,8 +882,18 @@ def test_program_threads_one_rng_stream_across_analog_and_digital_segments(
         samples.append(float(rng.random()))
         return state
 
+    def record_digital_rng(
+        state: MPS,
+        noise_model: NoiseModel,
+        sim_params: DigitalSimParams,
+        rng: np.random.Generator,
+    ) -> None:
+        del state, noise_model, sim_params
+        samples.append(float(rng.random()))
+
     monkeypatch.setattr(analog_module, "stochastic_process", record_rng)
     monkeypatch.setattr(digital_module, "stochastic_process", record_rng)
+    monkeypatch.setattr(digital_module, "_apply_local_noise", record_digital_rng, raising=False)
 
     analog_params = AnalogSimParams(
         elapsed_time=0.1,
