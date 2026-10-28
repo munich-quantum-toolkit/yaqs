@@ -12,6 +12,7 @@ releases may include breaking changes.
 
 ### Fixed
 
+- fixed layer sampling in runs without observables ([#643]) ([**@Pouri96**])
 - fixed gate sites in circuits with several quantum registers or none ([#641])
   ([**@Pouri96**])
 
@@ -312,6 +313,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
 [#641]: https://github.com/munich-quantum-toolkit/yaqs/pull/641
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624

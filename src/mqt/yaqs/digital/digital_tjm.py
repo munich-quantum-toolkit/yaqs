@@ -807,7 +807,7 @@ def digital_tjm(
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
-        if sim_params.sample_layers and layer.sample_points:
+        if sim_params.sample_layers and layer.sample_points and not shots_only:
             # Bond-dimension diagnostics and the entropy observables read the tensors
             # directly, so sample them in B form as before.
             state.normalize(form="B", decomposition="QR")
@@ -816,7 +816,8 @@ def digital_tjm(
                 assert diagnostics is not None
                 assert results is not None
                 state._record_diagnostics(diagnostics, col_idx)  # ruff: ignore[private-member-access]
-                state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
+                if wants_obs:
+                    state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
 
     counts: dict[int, int] | None = None
     # The gate loop leaves the center on the last gate; returned states and following
