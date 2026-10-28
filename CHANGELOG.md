@@ -13,8 +13,12 @@ releases may include breaking changes.
 ### Fixed
 
 - fixed layer sampling in runs without observables ([#643]) ([**@Pouri96**])
+- fixed gate sites in circuits with several quantum registers or none ([#641])
+  ([**@Pouri96**])
 
 ## [0.7.0] - 2026-10-13
+
+_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#070)._
 
 ### Added
 
@@ -112,6 +116,8 @@ releases may include breaking changes.
   ([#506]) ([**@Pouri96**])
 
 ## [0.6.0] - 2026-07-06
+
+_If you are upgrading: please see [`UPGRADING.md`](UPGRADING.md#060)._
 
 ### Added
 
@@ -297,9 +303,9 @@ for previous changelogs._
 <!-- Version links -->
 
 [Unreleased]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.7.0...HEAD
-[0.7.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.7.0
-[0.6.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.6.0
-[0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/compare/v0.5.0
+[0.7.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.7.0
+[0.6.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.6.0
+[0.5.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.5.0
 [0.4.0]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.4.0
 [0.3.3]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.3
 [0.3.2]: https://github.com/munich-quantum-toolkit/yaqs/releases/tag/v0.3.2
@@ -308,6 +314,7 @@ for previous changelogs._
 <!-- PR links -->
 
 [#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
+[#641]: https://github.com/munich-quantum-toolkit/yaqs/pull/641
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
 [#623]: https://github.com/munich-quantum-toolkit/yaqs/pull/623

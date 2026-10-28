@@ -38,7 +38,7 @@ from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fix
 from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
-from .utils.dag_utils import convert_dag_to_tensor_algorithm
+from .utils.dag_utils import _translate_node, convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -267,7 +267,7 @@ def _compile_circuit(
         single_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
         def translate(nodes: list[DAGOpNode]) -> tuple[BaseGate, ...]:
-            gates = tuple(_freeze_gate_arrays(convert_dag_to_tensor_algorithm(node)[0]) for node in nodes)
+            gates = tuple(_freeze_gate_arrays(_translate_node(dag, node)) for node in nodes)
             if physical_dimensions is not None:
                 for gate in gates:
                     _validate_gate_layout(gate, physical_dimensions, gate_mode)

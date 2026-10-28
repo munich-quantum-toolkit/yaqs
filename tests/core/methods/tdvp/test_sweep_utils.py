@@ -112,8 +112,7 @@ def _theta_from_singulars(s: NDArray[np.float64], m: int, n: int, *, seed: int) 
     U = _rand_unitary_like(m, r, seed=seed)
     V = _rand_unitary_like(n, r, seed=seed + 1)
     S = np.diag(s[:r].astype(np.complex128))
-    theta = (U @ S @ V.conj().T).astype(np.complex128, copy=False)
-    return cast("NDArray[np.complex128]", theta)
+    return (U @ S @ V.conj().T).astype(np.complex128, copy=False)
 
 
 def _as_input_tensor(theta: NDArray[np.complex128], d0: int, d1: int, d2: int, d3: int) -> NDArray[np.complex128]:
