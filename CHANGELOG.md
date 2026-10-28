@@ -14,6 +14,7 @@ releases may include breaking changes.
 
 - fixed asymmetric two-qubit gate application in the MPO equivalence backend
   ([#645]) ([**@Pouri96**])
+- fixed layer sampling in runs without observables ([#643]) ([**@Pouri96**])
 - fixed gate sites in circuits with several quantum registers or none ([#641])
   ([**@Pouri96**])
 
@@ -315,6 +316,7 @@ for previous changelogs._
 <!-- PR links -->
 
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
+[#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
 [#641]: https://github.com/munich-quantum-toolkit/yaqs/pull/641
 [#634]: https://github.com/munich-quantum-toolkit/yaqs/pull/634
 [#624]: https://github.com/munich-quantum-toolkit/yaqs/pull/624
