@@ -25,7 +25,7 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
 from ...core.data_structures.mpo_utils import resolve_lr_tensor
-from .dag_utils import convert_dag_to_tensor_algorithm, convert_matrix_layout
+from .dag_utils import _translate_node, convert_matrix_layout
 from .scheduler_utils import partition_disjoint_gate_batches
 
 if TYPE_CHECKING:
@@ -239,7 +239,7 @@ def pop_front_gates(dag: DAGCircuit) -> list[BaseGate]:
         if node.op.name in {"measure", "barrier"}:
             dag.remove_op_node(node)
             continue
-        gates.extend(convert_dag_to_tensor_algorithm(node))
+        gates.append(_translate_node(dag, node))
         dag.remove_op_node(node)
     return gates
 
