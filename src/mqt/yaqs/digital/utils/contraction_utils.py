@@ -22,7 +22,7 @@ import opt_einsum as oe
 from qiskit.converters import dag_to_circuit
 
 from ...core.data_structures.mpo import MPO
-from ...core.data_structures.mpo_utils import contract_mpo_site_with_mpo_site, decompose_theta
+from ...core.data_structures.mpo_utils import contract_mpo_site_with_mpo_site, decompose_theta, resolve_lr_tensor
 from ...core.parallel_utils import MPContext, available_cpus, limit_worker_threads
 from .dag_utils import (
     _translate_node,
@@ -55,7 +55,7 @@ def apply_gate(
 
     Depending on the gate's interaction type and the dimensionality of `theta`, this function contracts the gate's
     tensor with `theta` according to a predefined pattern. If `conjugate` is True, the gate tensor is conjugated before
-    contraction. Identity gates leave `theta` unchanged.
+    contraction. Identity gates leave `theta` unchanged. A two-qubit gate may be declared on its sites in either order.
 
     Args:
         gate (BaseGate): A gate object from the GateLibrary that contains .tensor, .interaction, and .sites attributes.
@@ -95,10 +95,12 @@ def apply_gate(
             else:
                 theta = oe.contract("ij, kjlmno->kilmno", gate.matrix, theta)
     elif gate.interaction == 2:
+        # ``theta`` has its sites in ascending order, so the gate tensor needs it too.
+        tensor = resolve_lr_tensor(gate, min(site0, site1), max(site0, site1))
         if conjugate:
-            theta = oe.contract("ijkl, klmnop->ijmnop", np.conj(gate.tensor), theta)
+            theta = oe.contract("ijkl, klmnop->ijmnop", np.conj(tensor), theta)
         else:
-            theta = oe.contract("ijkl, klmnop->ijmnop", gate.tensor, theta)
+            theta = oe.contract("ijkl, klmnop->ijmnop", tensor, theta)
     if conjugate:
         theta = np.transpose(theta, (3, 4, 2, 0, 1, 5))
 
@@ -413,7 +415,7 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
         dag1: The first circuit's DAGCircuit.
         dag2: The second circuit's DAGCircuit.
         threshold: The SVD threshold for truncation.
-        conjugate: If True, apply the gate from dag2 in conjugated form; otherwise, from dag1.
+        conjugate: If True, apply the gate from dag2 as its adjoint; otherwise, from dag1.
     """
     dag_to_search = dag1 if not conjugate else dag2
 
@@ -446,7 +448,8 @@ def apply_long_range_layer(mpo: MPO, dag1: DAGCircuit, dag2: DAGCircuit, thresho
                     gate_ = _translate_node(dag, node)
                     gate_mpo = MPO.from_gate(gate_, distance)
                     if conjugate:
-                        gate_mpo.rotate(conjugate=True)
+                        # The contraction below swaps the legs, so the plain conjugate gives the adjoint.
+                        gate_mpo.tensors = [np.conj(tensor) for tensor in gate_mpo.tensors]
                     dag.remove_op_node(node)
                     break
             break

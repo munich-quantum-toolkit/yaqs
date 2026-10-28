@@ -204,9 +204,7 @@ def apply_gate_left(
     if gate.interaction == 1:
         return apply_1q_left(op, gate.matrix, gate.sites[0], num_qubits, dagger=dagger)
     if gate.interaction == 2:
-        # Resolve the gate tensor to ascending site order exactly once: hardcoded gate
-        # classes already transpose ``gate.tensor`` for descending sites, so passing the
-        # declared order would make ``apply_2q_left`` transpose a second time.
+        # ``resolve_lr_tensor`` gives the tensor for ascending sites, whatever the declared order.
         left_site = min(gate.sites[0], gate.sites[1])
         right_site = max(gate.sites[0], gate.sites[1])
         tensor = resolve_lr_tensor(gate, left_site, right_site)
