@@ -173,7 +173,11 @@ class ProcessTensorSurrogate(nn.Module):
             raise TypeError(msg)
         return int(in_proj.in_features) - self._d_side
 
-    def forward(self, e_features: torch.Tensor, rho0: torch.Tensor) -> torch.Tensor:
+    def forward(  # ty: ignore[invalid-mutable-override]
+        self,
+        e_features: torch.Tensor,
+        rho0: torch.Tensor,
+    ) -> torch.Tensor:
         """Run a forward pass.
 
         Args:

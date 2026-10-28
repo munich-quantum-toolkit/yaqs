@@ -25,7 +25,7 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
 from ...core.data_structures.mpo_utils import resolve_lr_tensor
-from .dag_utils import convert_dag_to_tensor_algorithm, convert_matrix_layout
+from .dag_utils import _translate_node, convert_matrix_layout
 from .scheduler_utils import partition_disjoint_gate_batches
 
 if TYPE_CHECKING:
@@ -204,9 +204,7 @@ def apply_gate_left(
     if gate.interaction == 1:
         return apply_1q_left(op, gate.matrix, gate.sites[0], num_qubits, dagger=dagger)
     if gate.interaction == 2:
-        # Resolve the gate tensor to ascending site order exactly once: hardcoded gate
-        # classes already transpose ``gate.tensor`` for descending sites, so passing the
-        # declared order would make ``apply_2q_left`` transpose a second time.
+        # ``resolve_lr_tensor`` gives the tensor for ascending sites, whatever the declared order.
         left_site = min(gate.sites[0], gate.sites[1])
         right_site = max(gate.sites[0], gate.sites[1])
         tensor = resolve_lr_tensor(gate, left_site, right_site)
@@ -241,7 +239,7 @@ def pop_front_gates(dag: DAGCircuit) -> list[BaseGate]:
         if node.op.name in {"measure", "barrier"}:
             dag.remove_op_node(node)
             continue
-        gates.extend(convert_dag_to_tensor_algorithm(node))
+        gates.append(_translate_node(dag, node))
         dag.remove_op_node(node)
     return gates
 

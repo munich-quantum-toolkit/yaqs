@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Barrier, Gate, Operation, Parameter
+from qiskit.circuit import Barrier, Gate, Operation, Parameter, QuantumRegister, Qubit
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
     CPhaseGate,
@@ -848,6 +848,36 @@ def test_select_starting_point_odd() -> None:
 
     dag = circuit_to_dag(qc)
     first_iter, second_iter = select_starting_point(num_qubits, dag)
+
+    assert first_iter == range(1, 3, 2), "Expected odd qubits first."
+    assert second_iter == range(0, 3, 2), "Then the even qubit pairs."
+
+
+def _four_qubit_circuit(register_sizes: tuple[int, ...] | None) -> QuantumCircuit:
+    """Return an empty four-qubit circuit with the given register sizes, or without registers for ``None``."""
+    if register_sizes is None:
+        return QuantumCircuit([Qubit() for _ in range(4)])
+    return QuantumCircuit(*(QuantumRegister(size, f"r{position}") for position, size in enumerate(register_sizes)))
+
+
+@pytest.mark.parametrize("register_sizes", [(1, 3), (2, 2), None], ids=["1+3", "2+2", "register-less"])
+def test_check_longest_gate_counts_circuit_positions_across_registers(register_sizes: tuple[int, ...] | None) -> None:
+    """A gate between the first and last qubit spans four sites, whatever the registers."""
+    qc = _four_qubit_circuit(register_sizes)
+    qc.cx(qc.qubits[0], qc.qubits[3])
+
+    assert check_longest_gate(circuit_to_dag(qc)) == 4
+
+
+@pytest.mark.parametrize("register_sizes", [(1, 3), None], ids=["1+3", "register-less"])
+def test_select_starting_point_follows_circuit_positions_across_registers(
+    register_sizes: tuple[int, ...] | None,
+) -> None:
+    """The starting parity follows the circuit position of the first gate qubit, whatever the registers."""
+    qc = _four_qubit_circuit(register_sizes)
+    qc.cx(qc.qubits[1], qc.qubits[2])
+
+    first_iter, second_iter = select_starting_point(4, circuit_to_dag(qc))
 
     assert first_iter == range(1, 3, 2), "Expected odd qubits first."
     assert second_iter == range(0, 3, 2), "Then the even qubit pairs."

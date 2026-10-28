@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
-from qiskit.circuit import QuantumCircuit
+from qiskit.circuit import AncillaRegister, QuantumCircuit, QuantumRegister, Qubit
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
 from scipy.linalg import expm
@@ -25,7 +25,7 @@ import mqt.yaqs.digital.digital_tjm as digital_module
 from mqt.yaqs import DigitalSimParams, NoiseModel, Observable, Simulator, State
 from mqt.yaqs.core.data_structures.mpo_utils import resolve_lr_tensor
 from mqt.yaqs.core.data_structures.mps import MPS
-from mqt.yaqs.core.libraries.circuit_library import create_ising_circuit
+from mqt.yaqs.core.libraries.circuit_library import create_1d_fermi_hubbard_circuit, create_ising_circuit
 from mqt.yaqs.core.libraries.gate_library import CCX, GateLibrary, X
 from mqt.yaqs.core.methods.dissipation import apply_dissipation
 from mqt.yaqs.core.methods.stochastic_process import create_probability_distribution
@@ -45,6 +45,7 @@ from mqt.yaqs.digital.digital_tjm import (
     process_layer,
 )
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
+from tests.conftest import YAQS_TEST_SEED
 from tests.core.methods.tdvp.conftest import (
     HAAR_LR_FID_ABS,
     HAAR_LR_FID_FLOOR,
@@ -2173,6 +2174,44 @@ def test_ignores_non_mid_barriers_and_handles_measures() -> None:
         assert result.expectation_values[i].shape == (3,)
 
 
+@pytest.mark.parametrize("noisy", [False, True])
+def test_shots_only_run_with_sample_layers_returns_counts(*, noisy: bool) -> None:
+    """A shots-only run with ``sample_layers`` returns its counts."""
+    qc = QuantumCircuit(2)
+    qc.x(0)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.cx(0, 1)
+    noise_model = (
+        NoiseModel([{"name": "pauli_z", "sites": [site], "strength": 0.5} for site in range(2)]) if noisy else None
+    )
+    sim_params = DigitalSimParams(shots=8, sample_layers=True, random_seed=YAQS_TEST_SEED)
+
+    result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), qc, sim_params, noise_model)
+
+    # Z dephasing leaves |11> unchanged.
+    assert result.counts == {3: 8}
+    assert result.expectation_values == []
+    assert result.max_bond is None
+
+
+def test_sample_layers_without_observables_records_bonds_only() -> None:
+    """A run without observables records bond dimensions and evaluates no observable."""
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    qc.cx(0, 1)
+    qc.barrier(label="SAMPLE_OBSERVABLES")
+    sim_params = DigitalSimParams(get_state=True, sample_layers=True)
+
+    with patch.object(MPS, "_evaluate_observables", autospec=True) as evaluate:
+        result = Simulator(parallel=False, show_progress=False).run(State(2, initial="zeros"), qc, sim_params, None)
+
+    evaluate.assert_not_called()
+    assert result.max_bond is not None
+    # Bond dimension is 1 until the cx and 2 after it.
+    np.testing.assert_array_equal(result.max_bond, [1.0, 1.0, 2.0, 2.0])
+
+
 def test_shots_noiseless_get_state_returns_mps() -> None:
     """Noiseless shot simulation with ``get_state=True`` returns the final MPS."""
     qc = QuantumCircuit(2)
@@ -2609,6 +2648,87 @@ def test_obs_order_aligned() -> None:
         expected = float(np.real(Statevector(vec).expectation_value(Pauli("".join(label)))))
         got = float(np.real(result.expectation_values[i][-1]))
         assert got == pytest.approx(expected, abs=1e-10)
+
+
+# --- circuits with several quantum registers or none ---
+
+
+def _two_register_circuit() -> QuantumCircuit:
+    """Return an empty circuit with the registers ``a`` and ``b`` of two qubits each."""
+    return QuantumCircuit(QuantumRegister(2, "a"), QuantumRegister(2, "b"))
+
+
+def _ancilla_register_circuit() -> QuantumCircuit:
+    """Return an empty circuit with a register and an ancilla register of two qubits each."""
+    return QuantumCircuit(QuantumRegister(2, "q"), AncillaRegister(2, "work"))
+
+
+def _register_less_circuit() -> QuantumCircuit:
+    """Return an empty four-qubit circuit whose qubits belong to no register."""
+    return QuantumCircuit([Qubit() for _ in range(4)])
+
+
+def _z_observables(num_qubits: int) -> list[Observable]:
+    """Return a ``Z`` observable on every site."""
+    return [Observable("z", site) for site in range(num_qubits)]
+
+
+def _simulated_local_z(circuit: QuantumCircuit, sim_params: DigitalSimParams) -> NDArray[np.float64]:
+    """Return ``<Z>`` on every site after running the circuit with YAQS."""
+    state = State(circuit.num_qubits, initial="zeros")
+    result = Simulator(parallel=False, show_progress=False).run(state, circuit, sim_params, None)
+    return np.array([np.real(values[0]) for values in result.expectation_values], dtype=np.float64)
+
+
+def _statevector_local_z(circuit: QuantumCircuit) -> NDArray[np.float64]:
+    """Return ``<Z>`` on every qubit from the dense state vector."""
+    state = Statevector(circuit)
+    probabilities = [state.probabilities([qubit]) for qubit in range(circuit.num_qubits)]
+    return np.array([p_zero - p_one for p_zero, p_one in probabilities], dtype=np.float64)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+@pytest.mark.parametrize(
+    ("control", "target", "expected"),
+    [
+        pytest.param(1, 2, [1.0, -1.0, -1.0, 1.0], id="nearest-neighbor"),
+        pytest.param(0, 3, [-1.0, 1.0, 1.0, -1.0], id="long-range"),
+    ],
+)
+@pytest.mark.parametrize(
+    "make_circuit",
+    [_two_register_circuit, _ancilla_register_circuit, _register_less_circuit],
+    ids=["two-registers", "ancilla-register", "register-less"],
+)
+def test_gates_act_on_circuit_positions_without_a_single_register(
+    make_circuit: Callable[[], QuantumCircuit],
+    control: int,
+    target: int,
+    expected: list[float],
+    gate_mode: GateMode,
+) -> None:
+    """Gates act on the circuit positions of their qubits, whatever the registers."""
+    circuit = make_circuit()
+    circuit.x(circuit.qubits[control])
+    circuit.cx(circuit.qubits[control], circuit.qubits[target])
+    sim_params = DigitalSimParams(observables=_z_observables(4), gate_mode=gate_mode, preset="exact")
+
+    np.testing.assert_allclose(_statevector_local_z(circuit), expected, atol=1e-12)
+    np.testing.assert_allclose(_simulated_local_z(circuit, sim_params), expected, atol=1e-12)
+
+
+def test_fermi_hubbard_circuit_runs_in_the_default_gate_mode() -> None:
+    """The Fermi-Hubbard circuit, which has one register per spin, runs and matches the dense state vector."""
+    trotter = create_1d_fermi_hubbard_circuit(2, u=0.5, t=1.0, mu=0.5, num_trotter_steps=1, dt=0.1, timesteps=1)
+    circuit = QuantumCircuit(*trotter.qregs)
+    circuit.x(trotter.qubits[0])
+    circuit.x(trotter.qubits[2])
+    circuit.compose(trotter, inplace=True)
+    expected = np.cos(0.2) * np.array([-1.0, 1.0, -1.0, 1.0])
+    sim_params = DigitalSimParams(observables=_z_observables(4), preset="exact")
+
+    np.testing.assert_allclose(_statevector_local_z(circuit), expected, atol=1e-12)
+    np.testing.assert_allclose(_simulated_local_z(circuit, sim_params), expected, atol=1e-10)
 
 
 # ---- TEBD truncation gauge --------------------------------------------------------------

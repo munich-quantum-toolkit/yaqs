@@ -113,7 +113,7 @@ def _get_qubit_indices(dag: DAGCircuit | None, node: DAGOpNode) -> list[int]:
     """Return MPS site indices for a DAG operation node.
 
     Args:
-        dag: Parent DAG when available; used for ``find_bit`` lookup.
+        dag: Parent DAG when available; used for ``find_bit`` lookup. Without it, the index within the register is used.
         node: DAG operation node.
 
     Returns:
@@ -457,8 +457,9 @@ def check_longest_gate(dag: DAGCircuit) -> int:
         layer_circuit = dag_to_circuit(first_layer["graph"])
         for gate in layer_circuit.data:
             if gate.operation.num_qubits > 1:
-                distance = abs(gate.qubits[0]._index - gate.qubits[-1]._index) + 1  # ruff:ignore[private-member-access]
-                largest_distance = max(largest_distance, distance)
+                first_site = layer_circuit.find_bit(gate.qubits[0]).index
+                last_site = layer_circuit.find_bit(gate.qubits[-1]).index
+                largest_distance = max(largest_distance, abs(first_site - last_site) + 1)
 
     return largest_distance
 
@@ -492,7 +493,7 @@ def select_starting_point(num_qubits: int, dag: DAGCircuit) -> tuple[range, rang
         for gate in layer_circuit.data:
             # If a two-qubit gate appears with an odd-indexed starting qubit, switch the ordering.
             if gate.operation.num_qubits == 2:
-                if gate.qubits[0]._index % 2 != 0:  # ruff:ignore[private-member-access]
+                if layer_circuit.find_bit(gate.qubits[0]).index % 2 != 0:
                     odd = True
                 break
 

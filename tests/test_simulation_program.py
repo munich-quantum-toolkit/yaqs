@@ -38,13 +38,14 @@ from mqt.yaqs.core.data_structures.simulation_program import (
     _expand_analog_operator,  # ruff: ignore[import-private-name]  # shared analog interval helper
 )
 from mqt.yaqs.core.random_utils import make_trajectory_rng
+from tests.conftest import YAQS_TEST_SEED
 from tests.site_order_reference import mixed_radix_index
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
-    from qiskit.dagcircuit import DAGOpNode
+    from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
@@ -334,6 +335,27 @@ def test_digital_program_segment_returns_requested_shot_counts() -> None:
     assert result.counts is not None
     assert sum(result.counts.values()) == shots
     assert segment_result.output_state is None
+
+
+@pytest.mark.parametrize("noisy", [False, True])
+def test_shots_only_program_segment_with_sample_layers_returns_counts(*, noisy: bool) -> None:
+    """A shots-only program segment with ``sample_layers`` returns its counts."""
+    circuit = QuantumCircuit(2)
+    circuit.x(0)
+    circuit.barrier(label="SAMPLE_OBSERVABLES")
+    circuit.cx(0, 1)
+    noise_model = (
+        NoiseModel([{"name": "pauli_z", "sites": [site], "strength": 0.5} for site in range(2)]) if noisy else None
+    )
+    program = SimulationProgram([(circuit, DigitalSimParams(shots=8, sample_layers=True))], random_seed=YAQS_TEST_SEED)
+
+    result = Simulator(parallel=False, show_progress=False).run(
+        State(2, initial="zeros"), program, noise_model=noise_model
+    )
+
+    # Z dephasing leaves |11> unchanged.
+    assert result.counts == {3: 8}
+    assert result.expectation_values == []
 
 
 def test_program_call_contract_is_distinct_from_standalone_run() -> None:
@@ -2098,14 +2120,14 @@ def test_heterogeneous_program_rejects_binary_readout() -> None:
 def test_program_translates_digital_gates_once_for_all_trajectories(monkeypatch: pytest.MonkeyPatch) -> None:
     """Circuit-to-gate translation is shared rather than repeated per trajectory."""
     calls = 0
-    original_convert = digital_module.convert_dag_to_tensor_algorithm
+    original_translate = digital_module._translate_node  # ruff: ignore[private-member-access]
 
-    def counted_convert(node: DAGOpNode) -> list[BaseGate]:
+    def counted_translate(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
         nonlocal calls
         calls += 1
-        return original_convert(node)
+        return original_translate(dag, node)
 
-    monkeypatch.setattr(digital_module, "convert_dag_to_tensor_algorithm", counted_convert)
+    monkeypatch.setattr(digital_module, "_translate_node", counted_translate)
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
     params = DigitalSimParams()

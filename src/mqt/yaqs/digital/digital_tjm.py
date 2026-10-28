@@ -38,7 +38,7 @@ from ..core.methods.tdvp.sweep_utils import get_min_keep, renorm_drift, uses_fix
 from ..core.methods.tdvp.tdvp import evolve_window
 from ..core.parallel_utils import WORKER_CTX
 from ..core.random_utils import make_trajectory_rng
-from .utils.dag_utils import convert_dag_to_tensor_algorithm
+from .utils.dag_utils import _translate_node, convert_dag_to_tensor_algorithm
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -267,7 +267,7 @@ def _compile_circuit(
         single_nodes, even_nodes, odd_nodes, measure_barriers = process_layer(dag)
 
         def translate(nodes: list[DAGOpNode]) -> tuple[BaseGate, ...]:
-            gates = tuple(_freeze_gate_arrays(convert_dag_to_tensor_algorithm(node)[0]) for node in nodes)
+            gates = tuple(_freeze_gate_arrays(_translate_node(dag, node)) for node in nodes)
             if physical_dimensions is not None:
                 for gate in gates:
                     _validate_gate_layout(gate, physical_dimensions, gate_mode)
@@ -807,7 +807,7 @@ def digital_tjm(
                     apply_dissipation(state, local_noise_model, dt=1, sim_params=sim_params)
                     state = stochastic_process(state, local_noise_model, dt=1, sim_params=sim_params, rng=rng)
 
-        if sim_params.sample_layers and layer.sample_points:
+        if sim_params.sample_layers and layer.sample_points and not shots_only:
             # Bond-dimension diagnostics and the entropy observables read the tensors
             # directly, so sample them in B form as before.
             state.normalize(form="B", decomposition="QR")
@@ -816,7 +816,8 @@ def digital_tjm(
                 assert diagnostics is not None
                 assert results is not None
                 state._record_diagnostics(diagnostics, col_idx)  # ruff: ignore[private-member-access]
-                state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
+                if wants_obs:
+                    state._evaluate_observables(sim_params, results, col_idx)  # ruff: ignore[private-member-access]
 
     counts: dict[int, int] | None = None
     # The gate loop leaves the center on the last gate; returned states and following
