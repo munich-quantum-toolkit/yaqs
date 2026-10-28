@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
-    from qiskit.dagcircuit import DAGOpNode
+    from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
     from mqt.yaqs.core.data_structures.mps import MPS
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
@@ -2098,14 +2098,14 @@ def test_heterogeneous_program_rejects_binary_readout() -> None:
 def test_program_translates_digital_gates_once_for_all_trajectories(monkeypatch: pytest.MonkeyPatch) -> None:
     """Circuit-to-gate translation is shared rather than repeated per trajectory."""
     calls = 0
-    original_convert = digital_module.convert_dag_to_tensor_algorithm
+    original_translate = digital_module._translate_node  # ruff: ignore[private-member-access]
 
-    def counted_convert(node: DAGOpNode) -> list[BaseGate]:
+    def counted_translate(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
         nonlocal calls
         calls += 1
-        return original_convert(node)
+        return original_translate(dag, node)
 
-    monkeypatch.setattr(digital_module, "convert_dag_to_tensor_algorithm", counted_convert)
+    monkeypatch.setattr(digital_module, "_translate_node", counted_translate)
     circuit = QuantumCircuit(2)
     circuit.cx(0, 1)
     params = DigitalSimParams()
