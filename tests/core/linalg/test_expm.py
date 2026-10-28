@@ -9,10 +9,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
+import pytest
 import scipy.linalg
+from threadpoolctl import threadpool_info, threadpool_limits
 
 from mqt.yaqs.core import linalg
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from numpy.typing import NDArray
 
 
 def test_expm_matches_scipy_small_random() -> None:
@@ -35,6 +44,35 @@ def test_expm_hermitian_matches_expm_for_hermitian() -> None:
     ref = scipy.linalg.expm(-1j * dt * h)
     got = linalg.expm_hermitian(h.astype(np.complex128), dt)
     np.testing.assert_allclose(got, ref, rtol=1e-11, atol=1e-11)
+
+
+def test_expm_caps_blas_pools_to_one_thread_and_restores_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``expm`` and ``expm_hermitian`` run with one BLAS thread and restore the previous count."""
+    inside: list[tuple[int, ...]] = []
+
+    def blas_threads() -> tuple[int, ...]:
+        return tuple(pool["num_threads"] for pool in threadpool_info() if pool["user_api"] == "blas")
+
+    def spy(func: Callable[[NDArray[np.complex128]], object]) -> Callable[[NDArray[np.complex128]], object]:
+        def wrapper(a: NDArray[np.complex128]) -> object:
+            inside.append(blas_threads())
+            return func(a)
+
+        return wrapper
+
+    monkeypatch.setattr(scipy.linalg, "expm", spy(scipy.linalg.expm))
+    monkeypatch.setattr(np.linalg, "eigh", spy(np.linalg.eigh))
+    h = np.array([[1.0, 0.5], [0.5, -1.0]], dtype=np.complex128)
+    if not blas_threads():
+        pytest.skip("threadpoolctl lists no BLAS pool")
+    with threadpool_limits(limits=2):
+        before = blas_threads()
+        for _ in range(3):
+            linalg.expm(h)
+            linalg.expm_hermitian(h, 0.1)
+        assert blas_threads() == before
+    assert len(inside) == 6
+    assert all(set(counts) == {1} for counts in inside)
 
 
 def test_ishermitian_examples() -> None:

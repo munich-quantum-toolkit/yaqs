@@ -10,6 +10,11 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- cached the thread-pool controller in dense matrix exponentials ([#655])
+  ([**@Pouri96**])
+
 ### Fixed
 
 - fixed asymmetric two-qubit gate application in the MPO equivalence backend
@@ -315,6 +320,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#655]: https://github.com/munich-quantum-toolkit/yaqs/pull/655
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
 [#641]: https://github.com/munich-quantum-toolkit/yaqs/pull/641
