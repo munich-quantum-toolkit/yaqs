@@ -1423,9 +1423,10 @@ def test_multiply_mps_passes_restore_target_while_center_is_unknown(monkeypatch:
         max_bond_dim: int | None = None,
         trunc_mode: object = None,
         _restore_center: int | None = None,
+        _min_keep: int = 1,
     ) -> None:
         """Record compression metadata without changing the contracted tensors."""
-        del max_bond_dim, trunc_mode
+        del max_bond_dim, trunc_mode, _min_keep
         observed.append((compressed.orthogonality_center, _restore_center))
 
     monkeypatch.setattr(MPS, "compress", record_compress)
