@@ -1050,6 +1050,7 @@ class MPS:
         max_bond_dim: int | None = None,
         trunc_mode: TruncMode = "discarded_weight",
         _restore_center: int | None = None,
+        _min_keep: int = 1,
     ) -> None:
         """Compress bonds in place without renormalizing the state.
 
@@ -1064,6 +1065,7 @@ class MPS:
                 or ``"relative_discarded_weight"``; see
                 :func:`~mqt.yaqs.core.linalg.truncate` for definitions.
             _restore_center: Internal override for the final center site.
+            _min_keep: Internal minimum number of singular values retained per bond.
         """
         if _restore_center is not None:
             _restore_center = self._validate_center(_restore_center, name="_restore_center")
@@ -1094,6 +1096,7 @@ class MPS:
                 trunc_mode=trunc_mode,
                 threshold=threshold,
                 max_bond_dim=max_bond_dim,
+                min_keep=_min_keep,
             )
             self.tensors[site] = left_new
             self.tensors[site + 1] = right_new
