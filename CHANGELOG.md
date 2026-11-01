@@ -10,6 +10,11 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- added exact MPO construction for multi-qubit gates and Pauli sums ([#XXX])
+  ([**@Pouri96**])
+
 ### Changed
 
 - cached the thread-pool controller in dense matrix exponentials ([#655])
@@ -320,6 +325,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#XXX]: https://github.com/munich-quantum-toolkit/yaqs/pull/XXX
 [#655]: https://github.com/munich-quantum-toolkit/yaqs/pull/655
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
