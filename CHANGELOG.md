@@ -12,7 +12,7 @@ releases may include breaking changes.
 
 ### Added
 
-- added exact MPO construction for multi-qubit gates and Pauli sums ([#XXX])
+- added exact MPO construction for multi-qubit gates and Pauli sums ([#674])
   ([**@Pouri96**])
 
 ### Changed
@@ -325,7 +325,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
-[#XXX]: https://github.com/munich-quantum-toolkit/yaqs/pull/XXX
+[#674]: https://github.com/munich-quantum-toolkit/yaqs/pull/674
 [#655]: https://github.com/munich-quantum-toolkit/yaqs/pull/655
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
