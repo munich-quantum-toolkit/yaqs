@@ -2024,3 +2024,30 @@ def test_from_matrix_round_trip_preserves_site_zero_lsb() -> None:
 
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
     np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), expected, atol=1e-12)
+
+
+def test_from_pauli_sum_keeps_the_minimal_bond_on_a_long_chain() -> None:
+    """``cos t I - i sin t XZ...ZX`` keeps bond two on every cut of a long chain."""
+    length = 64
+    string = " ".join(["X0", *(f"Z{site}" for site in range(1, length - 1)), f"X{length - 1}"])
+    mpo = MPO()
+    mpo.from_pauli_sum(terms=[(np.cos(0.3), ""), (-1j * np.sin(0.3), string)], length=length)
+
+    assert [tensor.shape[3] for tensor in mpo.tensors[:-1]] == [2] * (length - 1)
+
+
+def test_jordan_wigner_fermi_hubbard_mpo_has_the_minimal_bond() -> None:
+    """The Jordan-Wigner Fermi-Hubbard MPO carries the operator-Schmidt rank, independent of the length."""
+    bonds = [
+        max(tensor.shape[3] for tensor in MPO.fermi_hubbard_1d(n, t=1.0, u=4.0, jordan_wigner=True).tensors[:-1])
+        for n in (8, 16)
+    ]
+
+    assert bonds == [7, 7]
+
+
+def test_from_pauli_sum_raises_on_negative_n_sweeps() -> None:
+    """A negative sweep count is rejected even when no compression runs."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"n_sweeps must be >= 0\."):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=2, n_sweeps=-1)
