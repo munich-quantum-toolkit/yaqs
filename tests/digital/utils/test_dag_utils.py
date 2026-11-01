@@ -57,6 +57,7 @@ from qiskit.circuit.library import (
     RXXGate,
     RYGate,
     RYYGate,
+    RZGate,
     RZXGate,
     RZZGate,
     SdgGate,
@@ -700,6 +701,17 @@ def test_wide_controlled_gate_keeps_its_action_under_many_controls(
         for tensor, bit_in, bit_out in zip(yaqs_gate.mpo_tensors, bits_in, bits_out, strict=True)
     ])
     assert amplitude[0, 0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_phase_on_several_targets_needs_no_svd() -> None:
+    """A phase on several targets is built from its strings, so the SVD fallback never runs."""
+    qc = QuantumCircuit(6)
+    qc.append(_controlled(UnitaryGate(-np.eye(4)), 4), range(6))
+
+    with patch("mqt.yaqs.digital.utils.dag_utils._control_window_mpo", side_effect=AssertionError("SVD fallback")):
+        (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2, 2, 2, 1, 1]
 
 
 @pytest.mark.parametrize(
@@ -1409,6 +1421,7 @@ def test_wide_multi_target_gate_builds_its_mpo_without_a_matrix() -> None:
             [2] * 8,
             id="phase-target-controls-spread-out",
         ),
+        pytest.param(5, MCMTGate(RZGate(2 * np.pi), 2, 3), list(range(5)), [2, 1, 1, 1], id="phase-up-to-rounding"),
         pytest.param(
             11,
             PauliGate("IIIIIIIIX").control(2),

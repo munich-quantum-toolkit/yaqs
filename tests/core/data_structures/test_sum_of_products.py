@@ -83,12 +83,17 @@ def test_random_pauli_sum_has_the_rank_on_every_cut(seed: int) -> None:
 
 
 def test_dependent_operators_on_a_site_are_combined() -> None:
-    """Projectors that add up to the identity on one site leave a single product, at bond one."""
-    terms = [(1.0, {0: PROJECTOR_ZERO, 1: PAULI_X}), (1.0, {0: PROJECTOR_ONE, 1: PAULI_X})]
+    """``I X - P0 X - P1 X + P0 Z`` is ``P0 Z``, since ``P0 + P1 = I`` is recognised, so its bond is one."""
+    terms = [
+        (1.0, {1: PAULI_X}),
+        (-1.0, {0: PROJECTOR_ZERO, 1: PAULI_X}),
+        (-1.0, {0: PROJECTOR_ONE, 1: PAULI_X}),
+        (1.0, {0: PROJECTOR_ZERO, 1: PAULI_Z}),
+    ]
 
     tensors = sum_of_products_tensors(terms, 2)
 
-    np.testing.assert_allclose(_to_matrix(tensors), _dense([(1.0, {1: PAULI_X})], 2), atol=1e-12)
+    np.testing.assert_allclose(_to_matrix(tensors), _dense([(1.0, {0: PROJECTOR_ZERO, 1: PAULI_Z})], 2), atol=1e-12)
     assert tensors[0].shape[3] == 1
 
 
