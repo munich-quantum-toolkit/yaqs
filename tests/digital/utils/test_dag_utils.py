@@ -17,6 +17,7 @@ ranges for gate application.
 from __future__ import annotations
 
 import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 from itertools import permutations
 from types import SimpleNamespace
 from typing import Literal
@@ -26,14 +27,26 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Barrier, Gate, Operation, Parameter, QuantumRegister, Qubit
+from qiskit.circuit import (
+    Barrier,
+    ControlledGate,
+    Gate,
+    Operation,
+    Parameter,
+    QuantumRegister,
+    Qubit,
+)
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
+    CCXGate,
     CPhaseGate,
     CRZGate,
+    CUGate,
     CXGate,
+    GlobalPhaseGate,
     HGate,
     IGate,
+    MCXGate,
     RXXGate,
     RYYGate,
     RZXGate,
@@ -46,6 +59,7 @@ from qiskit.circuit.library import (
     U1Gate,
     U3Gate,
     UnitaryGate,
+    XGate,
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
@@ -53,6 +67,7 @@ from qiskit.qasm2 import loads
 from qiskit.quantum_info import Operator, Statevector
 
 from mqt.yaqs import DigitalSimParams, EquivalenceChecker, State
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
@@ -63,6 +78,7 @@ from mqt.yaqs.digital.utils.dag_utils import (
     is_digital_noise_opportunity,
     select_starting_point,
 )
+from tests.conftest import YAQS_TEST_SEED
 from tests.core.methods.tdvp.conftest import _fidelity
 from tests.digital.conftest import _run_digital_observables_noiseless
 
@@ -243,7 +259,7 @@ def test_unbound_parameterized_gate_raises() -> None:
 def test_wide_matrix_fallback_gate_raises() -> None:
     """Matrix-fallback gates wider than the documented maximum should be rejected."""
     qc = QuantumCircuit(9)
-    qc.mcx(list(range(8)), 8)
+    qc.append(Gate("wide", 9, []), range(9))
     dag = circuit_to_dag(qc)
 
     with pytest.raises(ValueError, match="matrix fallback supports at most"):
@@ -442,6 +458,171 @@ def test_cswap_translates_without_generator() -> None:
     assert gate.sites == [0, 1, 2]
     assert not hasattr(gate, "generator")
     assert len(gate.mpo_tensors) == 3
+
+
+def _seeded_diagonal_unitary(dimension: int) -> np.ndarray:
+    """Return a diagonal unitary that is not a tensor product of one-qubit factors."""
+    rng = np.random.default_rng(20261031)
+    return np.diag(np.exp(2j * np.pi * rng.random(dimension)))
+
+
+def _controlled(base: Gate, num_ctrl_qubits: int, ctrl_state: int | None = None) -> ControlledGate:
+    """Controlled gate built directly, without the decomposition that ``UnitaryGate.control`` synthesizes.
+
+    Returns:
+        The controlled gate with ``base`` as its target operator.
+    """
+    return ControlledGate(
+        f"c{num_ctrl_qubits}{base.name}",
+        num_ctrl_qubits + base.num_qubits,
+        base.params,
+        num_ctrl_qubits=num_ctrl_qubits,
+        ctrl_state=ctrl_state,
+        base_gate=base,
+    )
+
+
+def _dense_controlled_gate(
+    num_qubits: int, controls: dict[int, int], targets: list[int], target_matrix: np.ndarray
+) -> np.ndarray:
+    """Dense ``|b><b| (x) U + (I - |b><b|) (x) I`` with site 0 least significant and ``U`` in Qiskit order.
+
+    Returns:
+        The ``2**num_qubits`` square matrix of the controlled gate.
+    """
+    out = np.eye(2**num_qubits, dtype=np.complex128)
+    for col in range(2**num_qubits):
+        if all((col >> site) & 1 == value for site, value in controls.items()):
+            target_in = sum(((col >> site) & 1) << j for j, site in enumerate(targets))
+            rest = col & ~sum(1 << site for site in targets)
+            out[col, col] = 0.0
+            for target_out in range(2 ** len(targets)):
+                row = rest | sum(((target_out >> j) & 1) << site for j, site in enumerate(targets))
+                out[row, col] = target_matrix[target_out, target_in]
+    return out
+
+
+def test_wide_controlled_gate_builds_its_mpo_without_a_matrix() -> None:
+    """A controlled gate on more than eight qubits is built from its controls and target operator."""
+    qc = QuantumCircuit(9)
+    qc.mcx(list(range(8)), 8)
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert gate.interaction == 9
+    assert gate.sites == list(range(9))
+    assert not hasattr(gate, "matrix")
+    assert not hasattr(gate, "generator")
+    assert len(gate.mpo_tensors) == 9
+
+
+@pytest.mark.parametrize(
+    ("gate", "qubits", "bonds"),
+    [
+        # The identity string and one controlled string differ on every cut.
+        pytest.param(
+            MCXGate(9, ctrl_state=0b101101011),
+            [0, 1, 2, 4, 6, 7, 9, 10, 11, 5],
+            [2] * 11,
+            id="mcx-controls-both-sides",
+        ),
+        # A phase on the target acts on the controls alone, so the bond is 1 after the last control.
+        pytest.param(
+            _controlled(UnitaryGate(np.exp(0.3j) * np.eye(2)), 9),
+            [*range(9), 10],
+            [2] * 8 + [1, 1],
+            id="phase-target",
+        ),
+        # A phase on two targets also acts on the controls alone, on either side of them.
+        pytest.param(_controlled(UnitaryGate(-np.eye(4)), 8), list(range(10)), [2] * 7 + [1, 1], id="two-target-phase"),
+        pytest.param(
+            _controlled(UnitaryGate(-np.eye(4)), 8),
+            [*range(2, 10), 0, 1],
+            [1, 1] + [2] * 7,
+            id="two-target-phase-targets-first",
+        ),
+    ],
+)
+def test_wide_controlled_gate_mpo_has_the_minimal_bond(gate: Gate, qubits: list[int], bonds: list[int]) -> None:
+    """Every cut of a wide controlled gate carries the operator-Schmidt rank of the gate on that cut."""
+    qc = QuantumCircuit(max(qubits) + 1)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "controls", "targets", "target_matrix"),
+    [
+        pytest.param(
+            9,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 0, 8: 1},
+            [4],
+            _haar_unitary(2, np.random.default_rng(YAQS_TEST_SEED)),
+            id="one-target",
+        ),
+        pytest.param(
+            10,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 0, 8: 1, 9: 1},
+            [4],
+            np.exp(0.3j) * np.eye(2),
+            id="phase-target",
+        ),
+        pytest.param(9, {0: 1, 1: 0, 2: 1, 3: 1, 4: 0, 5: 1, 6: 0, 7: 1}, [8], np.eye(2), id="identity-target"),
+    ],
+)
+def test_wide_controlled_gate_matches_the_dense_gate(
+    num_qubits: int, controls: dict[int, int], targets: list[int], target_matrix: np.ndarray
+) -> None:
+    """A wide controlled gate equals its definition for any control pattern and target order."""
+    ctrl_state = sum(value << i for i, value in enumerate(controls.values()))
+    qc = QuantumCircuit(num_qubits)
+    qc.append(_controlled(UnitaryGate(target_matrix), len(controls), ctrl_state), [*controls, *targets])
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_controlled_gate(num_qubits, controls, targets, target_matrix)
+    assert_allclose(MPO.from_gate(gate, num_qubits).to_matrix(), expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        pytest.param(
+            ControlledGate("c8x", 11, [], num_ctrl_qubits=8, base_gate=XGate()),
+            id="target-with-ancillas",
+        ),
+        pytest.param(
+            _controlled(UnitaryGate(_seeded_diagonal_unitary(512), check_input=False), 2),
+            id="nine-dense-targets",
+        ),
+        pytest.param(CUGate(0.1, 0.2, 0.3, 0.4).control(7, annotated=False), id="base-without-matrix"),
+        pytest.param(GlobalPhaseGate(0.3).control(9, annotated=False), id="no-target"),
+        pytest.param(_controlled(UnitaryGate(np.diag([1.0, 2.0]), check_input=False), 8), id="non-unitary-base"),
+    ],
+)
+def test_wide_controlled_gate_without_a_single_target_operator_falls_back(gate: Gate) -> None:
+    """A wide controlled gate that is not controls plus one unitary target operator keeps the fallback limit."""
+    qc = QuantumCircuit(gate.num_qubits)
+    qc.append(gate, range(gate.num_qubits))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+
+def test_wide_controlled_gate_survives_pickling() -> None:
+    """A wide controlled gate keeps its MPO through pickling, as trajectory workers receive it."""
+    qc = QuantumCircuit(10)
+    qc.mcx(list(range(9)), 9)
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    restored = pickle.loads(pickle.dumps(gate))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sites == gate.sites
+    for restored_tensor, tensor in zip(restored.mpo_tensors, gate.mpo_tensors, strict=True):
+        assert_allclose(restored_tensor, tensor)
 
 
 def test_custom_three_qubit_unitary_gate_translation() -> None:
@@ -881,3 +1062,42 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
 
     assert first_iter == range(1, 3, 2), "Expected odd qubits first."
     assert second_iter == range(0, 3, 2), "Then the even qubit pairs."
+
+
+@pytest.mark.parametrize(
+    ("gate", "qubits", "bonds"),
+    [
+        pytest.param(MCXGate(3), [0, 1, 2, 3], [2, 2, 2], id="mcx-on-four-qubits"),
+        pytest.param(MCXGate(7, ctrl_state=0b1011001), [0, 1, 2, 3, 5, 6, 7, 4], [2] * 7, id="mcx-target-inside"),
+        # Open controls give names outside the gate library, such as ``ccx_o1`` and ``cswap_o0``.
+        pytest.param(CCXGate(ctrl_state=1), [0, 1, 2], [2, 2], id="toffoli-with-an-open-control"),
+    ],
+)
+def test_gate_from_three_qubits_is_built_from_its_parts(gate: Gate, qubits: list[int], bonds: list[int]) -> None:
+    """From three qubits on, a gate whose parts Qiskit states is built from them at the minimal bond."""
+    qc = QuantumCircuit(len(qubits))
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(yaqs_gate, "matrix")
+    assert_allclose(MPO.from_gate(yaqs_gate, len(qubits)).to_matrix(), Operator(qc).data, atol=1e-12)
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        pytest.param(CUGate(0.1, 0.2, 0.3, 0.4).control(1, annotated=False), id="base-without-matrix"),
+        pytest.param(GlobalPhaseGate(0.3).control(3, annotated=False), id="no-target"),
+    ],
+)
+def test_gate_from_three_qubits_outside_the_builders_keeps_its_matrix(gate: Operation) -> None:
+    """A gate on three to eight qubits that no builder takes keeps the dense fallback."""
+    qc = QuantumCircuit(gate.num_qubits)
+    qc.append(gate, range(gate.num_qubits))
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert hasattr(yaqs_gate, "matrix")
+    assert_allclose(MPO.from_gate(yaqs_gate, gate.num_qubits).to_matrix(), Operator(qc).data, atol=1e-12)

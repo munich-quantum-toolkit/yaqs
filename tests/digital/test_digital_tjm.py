@@ -17,6 +17,10 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit.circuit import AncillaRegister, QuantumCircuit, QuantumRegister, Qubit
+from qiskit.circuit.library import (
+    MCPhaseGate,
+    MCXGate,
+)
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
 from scipy.linalg import expm
@@ -71,6 +75,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+    from qiskit.circuit import Gate
 
     from mqt.yaqs.core.data_structures.simulation_parameters import GateMode
 
@@ -2387,6 +2392,59 @@ def test_cswap_statevector(gate_mode: GateMode) -> None:
     qc.x(1)
     qc.ry(0.5, 2)
     qc.cswap(0, 1, 2)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps", "tdvp", "full-tdvp"])
+@pytest.mark.parametrize(
+    ("num_qubits", "make_gate", "qubits"),
+    [
+        pytest.param(10, lambda: MCXGate(8), [*range(8), 9], id="mcx-with-spectator"),
+        pytest.param(
+            12,
+            lambda: MCXGate(10, ctrl_state=0b1011001110),
+            [11, 0, 7, 2, 9, 4, 10, 1, 3, 8, 5],
+            id="mcx-open-controls-unsorted",
+        ),
+        pytest.param(12, lambda: MCPhaseGate(0.7, 9), [0, 1, 2, 4, 5, 7, 8, 10, 11, 6], id="mcphase-with-spectators"),
+    ],
+)
+def test_wide_controlled_gate_statevector(
+    num_qubits: int, make_gate: Callable[[], Gate], qubits: list[int], gate_mode: GateMode
+) -> None:
+    """A controlled gate on more than eight qubits should match the Qiskit statevector in every gate mode."""
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    qc = QuantumCircuit(num_qubits)
+    for qubit in range(num_qubits):
+        qc.ry(float(rng.uniform(0.4, 2.7)), qubit)
+    qc.append(make_gate(), qubits)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    ref = np.asarray(Statevector(qc).data, dtype=np.complex128)
+    assert _fidelity(ref, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps", "tdvp", "full-tdvp"])
+@pytest.mark.parametrize(
+    ("make_gate", "qubits"),
+    [
+        pytest.param(lambda: MCXGate(3, ctrl_state=0b101), [0, 3, 1, 4], id="mcx-open-controls-with-spectator"),
+    ],
+)
+def test_controlled_gate_from_three_qubits_statevector(
+    make_gate: Callable[[], Gate], qubits: list[int], gate_mode: GateMode
+) -> None:
+    """A controlled gate on three to eight qubits, built from its parts, matches Qiskit in every gate mode."""
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    qc = QuantumCircuit(5)
+    for qubit in range(5):
+        qc.ry(float(rng.uniform(0.4, 2.7)), qubit)
+    qc.append(make_gate(), qubits)
 
     vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
     assert isinstance(vec, np.ndarray)

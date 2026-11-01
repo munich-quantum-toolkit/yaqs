@@ -17,8 +17,9 @@ using their DAG representations. It provides utilities to:
 
 Qiskit instructions whose ``op.name`` matches one of the 31 entries in
 :data:`SUPPORTED_QISKIT_GATE_NAMES` are translated via hardcoded ``GateLibrary``
-classes. All other unitary gates fall back to matrix-backed
-:class:`~mqt.yaqs.core.libraries.gate_library.BaseGate` instances.
+classes. From three qubits on, a controlled gate is built from its controls and target operator
+without the dense matrix of the gate. All other unitary gates fall back to matrix-backed
+:class:`~mqt.yaqs.core.libraries.gate_library.BaseGate` instances on at most eight qubits.
 """
 
 from __future__ import annotations
@@ -26,13 +27,25 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from qiskit.circuit import Operation, Parameter, ParameterExpression
+from qiskit.circuit import (
+    ControlledGate,
+    Gate,
+    Operation,
+    Parameter,
+    ParameterExpression,
+)
 from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.exceptions import QiskitError
 from qiskit.quantum_info import Operator
 
+from ...core.data_structures._sum_of_products import sum_of_products_tensors
 from ...core.libraries.gate_library import BaseGate, GateLibrary
+from ...core.libraries.operator_matrices import (
+    IDENTITY,
+    PROJECTOR_ONE,
+    PROJECTOR_ZERO,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -226,6 +239,8 @@ def _reject_unsupported(node: DAGOpNode) -> None:
 # Bound on the dense matrix fallback: a ``2**n x 2**n`` complex128 matrix reaches
 # 1 MB at n = 8 and grows by a factor of 16 per added qubit.
 _MAX_MATRIX_FALLBACK_QUBITS = 8
+# Narrower gates keep their dense matrix, which the one- and two-site paths read directly.
+_MIN_PARTS_QUBITS = 3
 
 
 def is_digital_noise_opportunity(operation: Operation) -> bool:
@@ -296,6 +311,177 @@ def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate
     return gate
 
 
+def _identity_multiple(matrix: NDArray[np.complex128]) -> complex | None:
+    """Return ``c`` if ``matrix`` is ``c`` times the identity up to round-off relative to ``matrix``, else ``None``.
+
+    Args:
+        matrix: Square matrix.
+
+    Returns:
+        The multiple, ``0`` for the zero matrix, or ``None``.
+    """
+    if not matrix.any():
+        return 0j
+    multiple = np.trace(matrix) / len(matrix)
+    if np.linalg.norm(matrix - multiple * np.eye(len(matrix))) <= 1e-12 * np.linalg.norm(matrix):
+        return complex(multiple)
+    return None
+
+
+def _controlled_product_mpo(
+    controls: dict[int, int], targets: list[int], factors: list[NDArray[np.complex128]]
+) -> list[NDArray[np.complex128]]:
+    """Return the MPO of ``I + |b><b| (x) u_1 (x) ... (x) u_k - |b><b| (x) I`` at the minimal bond.
+
+    Args:
+        controls: Control sites mapped to the value each one must read.
+        targets: Target sites, in the factor order of ``factors``.
+        factors: One-qubit factor of each target.
+
+    Returns:
+        Tensors ``(out, in, left, right)`` for every site from the first to the last involved site.
+    """
+    first_site, last_site = min([*controls, *targets]), max([*controls, *targets])
+    projectors = (PROJECTOR_ZERO, PROJECTOR_ONE)
+    control_ops = {site - first_site: projectors[value] for site, value in controls.items()}
+    controlled = dict(control_ops)
+    phase = 1.0 + 0j
+    for target, factor in zip(targets, factors, strict=True):
+        # A factor c I acts on no qubit, so c joins the coefficient of the controlled string.
+        shift = _identity_multiple(factor - IDENTITY)
+        if shift is None:
+            controlled[target - first_site] = factor
+        else:
+            phase *= 1 + shift
+    terms = [(1.0, {}), (phase, controlled), (-1.0, control_ops)]
+    return sum_of_products_tensors(terms, last_site - first_site + 1)
+
+
+def _controlled_gate_mpo(
+    controls: dict[int, int], targets: list[int], target_matrix: NDArray[np.complex128]
+) -> list[NDArray[np.complex128]]:
+    """Return the MPO of ``|b><b| (x) U + (I - |b><b|) (x) I`` at the minimal bond on every cut.
+
+    Args:
+        controls: Control sites mapped to the value each one must read.
+        targets: Target sites in the factor order of ``target_matrix``.
+        target_matrix: Target unitary in YAQS factor order.
+
+    Returns:
+        Tensors ``(out, in, left, right)`` for every site from the first to the last involved site.
+    """
+    difference = target_matrix - np.eye(len(target_matrix), dtype=np.complex128)
+    phase = _identity_multiple(difference)
+    if phase is not None:
+        return _controlled_product_mpo(controls, targets, [(1 + phase) * IDENTITY] + [IDENTITY] * (len(targets) - 1))
+    return _controlled_product_mpo(controls, targets, [target_matrix])
+
+
+class _ControlledGate(BaseGate):
+    """Controlled gate given by its MPO alone, without a dense ``matrix`` or ``tensor``."""
+
+    def __init__(
+        self,
+        target: NDArray[np.complex128],
+        control_values: list[int],
+    ) -> None:
+        """Store the target operator and the value each control must read.
+
+        Args:
+            target: Target unitary in YAQS factor order.
+            control_values: Required value of each control, in control order.
+        """
+        self._target = target
+        self._control_values = control_values
+        self.interaction = len(control_values) + int(np.log2(target.shape[0]))
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Bind the controls, then the targets, and build the MPO.
+
+        Args:
+            *sites: Site indices or lists of indices, controls before targets.
+
+        Raises:
+            ValueError: If the site count differs from ``interaction``.
+        """
+        sites_list = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+
+        self.sites = sites_list
+        num_controls = len(self._control_values)
+        controls = dict(zip(sites_list[:num_controls], self._control_values, strict=True))
+        targets = sites_list[num_controls:]
+        self.mpo_tensors = _controlled_gate_mpo(controls, targets, self._target)
+
+
+def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
+    """Return ``(base gate, number of controls, control state, number of targets)``, else ``None``.
+
+    Args:
+        op: Qiskit operation.
+
+    Returns:
+        The controls, base gate and target count, or ``None`` if ``op`` is not a plain controlled gate.
+    """
+    if isinstance(op, ControlledGate):
+        base = op.base_gate
+        # Any qubit beyond the controls and the base is an ancilla, which the width check rejects.
+        num_targets = 0 if base is None else base.num_qubits
+        return base, op.num_ctrl_qubits, op.ctrl_state, num_targets
+    return None
+
+
+def _translate_controlled(
+    base: Gate | None,
+    *,
+    num_controls: int,
+    ctrl_state: int,
+    num_targets: int,
+    name: str,
+    sites: list[int],
+) -> BaseGate | None:
+    """Build a controlled gate from its controls and target operator, or return ``None`` to fall back.
+
+    Args:
+        base: Target operator of the controlled gate.
+        num_controls: Number of control qubits, which come first in ``sites``.
+        ctrl_state: Value the controls must read, as a Qiskit control state.
+        num_targets: Number of target qubits the gate declares.
+        name: Qiskit operation name to store on the YAQS gate.
+        sites: Qubit indices, controls before targets.
+
+    Returns:
+        The gate, or ``None`` if it is not controls plus a unitary operator this path can build.
+    """
+    if base is None or num_controls < 1 or num_targets < 1 or num_controls + num_targets != len(sites):
+        return None
+    target: NDArray[np.complex128] | None = None
+    if target is None and num_targets <= _MAX_MATRIX_FALLBACK_QUBITS and base.num_qubits == num_targets:
+        try:
+            target_matrix = _extract_matrix(base, name=name)
+        except ValueError:
+            return None
+        if not _is_unitary(target_matrix):
+            return None
+        target = convert_matrix_layout(target_matrix) if num_targets >= 2 else target_matrix
+        if num_targets >= 2 and _identity_multiple(target - np.eye(len(target))) is None:
+            return None
+    if target is None:
+        return None
+    gate = _ControlledGate(target, [(ctrl_state >> i) & 1 for i in range(num_controls)])
+    gate.name = name
+    gate.set_sites(*sites)
+    return gate
+
+
 def _translate_node(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
     """Convert a single DAG operation node into a YAQS gate.
 
@@ -318,7 +504,22 @@ def _translate_node(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
 
     sites = _get_qubit_indices(dag, node)
     if name not in SUPPORTED_QISKIT_GATE_NAMES:
-        return _translate_matrix(node.op, name=name, sites=sites)
+        op = node.op
+        if len(sites) >= _MIN_PARTS_QUBITS:
+            controlled = _as_controlled(op)
+            if controlled is not None:
+                base, num_controls, ctrl_state, num_targets = controlled
+                gate = _translate_controlled(
+                    base,
+                    num_controls=num_controls,
+                    ctrl_state=ctrl_state,
+                    num_targets=num_targets,
+                    name=name,
+                    sites=sites,
+                )
+                if gate is not None:
+                    return gate
+        return _translate_matrix(op, name=name, sites=sites)
 
     try:
         gate_cls = getattr(GateLibrary, name)
@@ -337,7 +538,8 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     For each node, it retrieves the corresponding gate class from the GateLibrary, initializes it, sets any
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
-    Unknown unitary Qiskit gates on up to eight qubits are converted from their matrix representation.
+    From three qubits on, controlled gates are built as an MPO from their parts. Other unknown unitary
+    Qiskit gates on up to eight qubits are converted from their matrix representation.
     ``barrier`` nodes are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops,
     and control-flow instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for
     hardcoded gate names.
@@ -351,7 +553,7 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
         dag: The DAGCircuit (or a single DAGOpNode) representing a quantum operation.
 
     Returns:
-        A list of gate objects, each with attributes such as .tensor and .sites.
+        A list of gate objects, each with its ``sites`` assigned.
     """
     algorithm: list[BaseGate] = []
 
