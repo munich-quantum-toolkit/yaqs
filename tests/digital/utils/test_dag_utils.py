@@ -28,9 +28,12 @@ import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
 from qiskit.circuit import (
+    AnnotatedOperation,
     Barrier,
     ControlledGate,
+    ControlModifier,
     Gate,
+    InverseModifier,
     Operation,
     Parameter,
     QuantumRegister,
@@ -62,6 +65,7 @@ from qiskit.circuit.library import (
     U3Gate,
     UnitaryGate,
     XGate,
+    ZGate,
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
@@ -516,6 +520,39 @@ def test_wide_controlled_gate_builds_its_mpo_without_a_matrix() -> None:
     assert not hasattr(gate, "matrix")
     assert not hasattr(gate, "generator")
     assert len(gate.mpo_tensors) == 9
+
+
+def test_annotated_wide_controlled_gate_builds_its_mpo() -> None:
+    """A control given as an annotation takes the same path as a plain controlled gate."""
+    qc = QuantumCircuit(12)
+    qc.append(ZGate().control(11, annotated=True), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(gate, "matrix")
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2] * 11
+
+
+def test_annotated_wide_controlled_gate_matches_the_dense_gate() -> None:
+    """The control state of an annotated controlled gate is read from its modifier."""
+    ctrl_state = 5
+    controls = {site: (ctrl_state >> site) & 1 for site in range(9)}
+    qc = QuantumCircuit(10)
+    qc.append(ZGate().control(9, annotated=True, ctrl_state=ctrl_state), range(10))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_controlled_gate(10, controls, [9], np.asarray(ZGate().to_matrix(), dtype=np.complex128))
+    assert_allclose(MPO.from_gate(gate, 10).to_matrix(), expected, atol=1e-12)
+
+
+def test_annotated_operation_that_is_not_only_controls_falls_back() -> None:
+    """An annotation carrying more than control modifiers keeps the fallback limit."""
+    qc = QuantumCircuit(10)
+    qc.append(AnnotatedOperation(ZGate(), [ControlModifier(9), InverseModifier()]), range(10))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
 
 
 @pytest.mark.parametrize(
@@ -1142,6 +1179,7 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
     [
         pytest.param(MCXGate(3), [0, 1, 2, 3], [2, 2, 2], id="mcx-on-four-qubits"),
         pytest.param(MCXGate(7, ctrl_state=0b1011001), [0, 1, 2, 3, 5, 6, 7, 4], [2] * 7, id="mcx-target-inside"),
+        pytest.param(ZGate().control(7, annotated=True), list(range(8)), [2] * 7, id="annotated-z-on-eight-qubits"),
         # Open controls give names outside the gate library, such as ``ccx_o1`` and ``cswap_o0``.
         pytest.param(CCXGate(ctrl_state=1), [0, 1, 2], [2, 2], id="toffoli-with-an-open-control"),
         pytest.param(CSwapGate(ctrl_state=0), [0, 1, 2], [2, 4], id="fredkin-with-an-open-control"),
@@ -1165,6 +1203,7 @@ def test_gate_from_three_qubits_is_built_from_its_parts(gate: Gate, qubits: list
     [
         pytest.param(CUGate(0.1, 0.2, 0.3, 0.4).control(1, annotated=False), id="base-without-matrix"),
         pytest.param(GlobalPhaseGate(0.3).control(3, annotated=False), id="no-target"),
+        pytest.param(AnnotatedOperation(CCXGate(), [ControlModifier(0)]), id="no-control"),
     ],
 )
 def test_gate_from_three_qubits_outside_the_builders_keeps_its_matrix(gate: Operation) -> None:

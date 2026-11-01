@@ -29,7 +29,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 import opt_einsum as oe
 from qiskit.circuit import (
+    AnnotatedOperation,
     ControlledGate,
+    ControlModifier,
     Gate,
     Operation,
     Parameter,
@@ -520,6 +522,17 @@ def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
         # Any qubit beyond the controls and the base is an ancilla, which the width check rejects.
         num_targets = 0 if base is None else base.num_qubits
         return base, op.num_ctrl_qubits, op.ctrl_state, num_targets
+    # Qiskit 3.0 returns an AnnotatedOperation from Gate.control(); one control modifier is the flat gate.
+    if isinstance(op, AnnotatedOperation) and len(op.modifiers) == 1:
+        modifier = op.modifiers[0]
+        if isinstance(modifier, ControlModifier) and isinstance(op.base_op, Gate):
+            num_controls = modifier.num_ctrl_qubits
+            ctrl_state = modifier.ctrl_state
+            num_targets = op.base_op.num_qubits
+            if ctrl_state is None:  # every control reads one
+                return op.base_op, num_controls, (1 << num_controls) - 1, num_targets
+            if isinstance(ctrl_state, int):
+                return op.base_op, num_controls, ctrl_state, num_targets
     return None
 
 

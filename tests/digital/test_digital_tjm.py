@@ -22,6 +22,7 @@ from qiskit.circuit.library import (
     MCXGate,
     RZXGate,
     SwapGate,
+    ZGate,
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
@@ -2419,6 +2420,12 @@ def test_cswap_statevector(gate_mode: GateMode) -> None:
             lambda: RZXGate(0.9).control(7, annotated=False),
             [*range(7), 10, 8],
             id="controlled-rzx-descending-targets",
+        ),
+        pytest.param(
+            10,
+            lambda: ZGate().control(9, annotated=True, ctrl_state=0b010110101),
+            list(range(10)),
+            id="annotated-controlled-z",
         ),
     ],
 )
