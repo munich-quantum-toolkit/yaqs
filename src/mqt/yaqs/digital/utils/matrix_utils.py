@@ -24,6 +24,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.quantum_info import Operator
 
+from ...core.data_structures.mpo import MPO
 from ...core.data_structures.mpo_utils import resolve_lr_tensor
 from .dag_utils import _translate_node, convert_matrix_layout
 from .scheduler_utils import partition_disjoint_gate_batches
@@ -194,7 +195,7 @@ def apply_gate_left(
 
     Args:
         op: Operator tensor with ``2 * num_qubits`` indices of dimension 2.
-        gate: Gate object with ``sites`` and ``matrix``/``tensor`` data.
+        gate: Gate object with ``sites`` and ``matrix``/``tensor`` data, or only ``mpo_tensors``.
         num_qubits: Total number of qubits.
         dagger: If True, apply each gate as its conjugate transpose.
 
@@ -214,12 +215,16 @@ def apply_gate_left(
     # Qiskit little-endian ordering. The layout map is an involution. The tensorized
     # backend maps chain site ``k`` to Qiskit qubit ``num_qubits - 1 - k``, so the site
     # indices are mirrored to stay consistent with the one- and two-qubit branches.
-    local = convert_matrix_layout(gate.matrix)
-    if dagger:
-        local = local.conj().T
     op_mat = op.reshape(2**num_qubits, 2**num_qubits)
-    mirrored_sites = [num_qubits - 1 - site for site in gate.sites]
-    full = embed_unitary(local, mirrored_sites, num_qubits)
+    if getattr(gate, "matrix", None) is None:
+        # A gate given only by MPO tensors is densified over the chain, then mirrored by the layout map.
+        full = convert_matrix_layout(MPO.from_gate(gate, num_qubits).to_matrix())
+    else:
+        local = convert_matrix_layout(gate.matrix)
+        mirrored_sites = [num_qubits - 1 - site for site in gate.sites]
+        full = embed_unitary(local, mirrored_sites, num_qubits)
+    if dagger:
+        full = full.conj().T
     return (full @ op_mat).reshape((2,) * (2 * num_qubits))
 
 
