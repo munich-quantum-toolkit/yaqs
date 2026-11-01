@@ -16,9 +16,9 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import MCMTGate, MCXGate, SwapGate, XGate
+from qiskit.circuit.library import MCMTGate, MCXGate, PauliGate, SwapGate, XGate
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Statevector, random_unitary
+from qiskit.quantum_info import Pauli, Statevector, random_unitary
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -495,3 +495,26 @@ def test_long_range_gate_enters_window_from_right_at_nearest_boundary() -> None:
     assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-10
     assert state.orthogonality_center == last_site
     assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_wide_pauli_gate_widens_a_qudit_spectator() -> None:
+    """A Pauli gate on more than eight qubits acts exactly on a state with a qudit spectator."""
+    physical_dimensions = [2] * 5 + [3] + [2] * 4
+    qubits = [0, 1, 2, 3, 4, 6, 7, 8, 9]
+    label = "XYZXYZXYZ"
+    qc = QuantumCircuit(len(physical_dimensions))
+    qc.append(PauliGate(label), qubits)
+    yaqs_gate = _gate_from_circuit(qc)
+    state = _seeded_qudit_mps(physical_dimensions, seed=20261031)
+
+    # Site 0 is the fastest index of ``to_vec``, and ``label[-1 - j]`` acts on ``qubits[j]``.
+    last = len(physical_dimensions) - 1
+    expected = state.to_vec().reshape(physical_dimensions[::-1])
+    for j, site in enumerate(qubits):
+        factor = Pauli(label[-1 - j]).to_matrix()
+        expected = np.moveaxis(np.tensordot(factor, expected, axes=(1, last - site)), 0, last - site)
+
+    apply_long_range_gate_mpo(state, yaqs_gate, _sim_params())
+
+    assert _fidelity(state.to_vec(), expected.reshape(-1)) >= 1.0 - 1e-12
+    assert [tensor.shape[0] for tensor in state.tensors] == physical_dimensions

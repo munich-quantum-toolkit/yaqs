@@ -17,8 +17,9 @@ using their DAG representations. It provides utilities to:
 
 Qiskit instructions whose ``op.name`` matches one of the 31 entries in
 :data:`SUPPORTED_QISKIT_GATE_NAMES` are translated via hardcoded ``GateLibrary``
-classes. From three qubits on, a controlled gate is built from its controls and target operator
-without the dense matrix of the gate. All other unitary gates fall back to matrix-backed
+classes. From three qubits on, a controlled gate is built from its controls and target operator,
+and a Pauli rotation or Pauli string from its terms, without the dense matrix of the gate. All
+other unitary gates fall back to matrix-backed
 :class:`~mqt.yaqs.core.libraries.gate_library.BaseGate` instances on at most eight qubits.
 """
 
@@ -37,14 +38,14 @@ from qiskit.circuit import (
     Parameter,
     ParameterExpression,
 )
-from qiskit.circuit.library import PauliGate
+from qiskit.circuit.library import PauliEvolutionGate, PauliGate
 from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.exceptions import QiskitError
-from qiskit.quantum_info import Operator
+from qiskit.quantum_info import Operator, SparsePauliOp
 
 from ...core import linalg
-from ...core.data_structures._sum_of_products import sum_of_products_tensors
+from ...core.data_structures._sum_of_products import ExactComplex, sum_of_products_tensors
 from ...core.data_structures.mpo import MPO
 from ...core.data_structures.mpo_utils import make_identity_site
 from ...core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
@@ -59,6 +60,8 @@ from ...core.libraries.operator_matrices import (
 from ...core.methods.decompositions import right_qr
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
     from qiskit.circuit import Qubit
     from qiskit.dagcircuit import DAGCircuit
@@ -254,6 +257,17 @@ _MAX_MATRIX_FALLBACK_QUBITS = 8
 _MIN_PARTS_QUBITS = 3
 _PAULI_LABELS = frozenset("IXYZ")
 _PAULI_MATRIX = {"I": IDENTITY, "X": PAULI_X, "Y": PAULI_Y, "Z": PAULI_Z}
+# The number of Pauli strings sets the width of every tensor, and m commuting rotations give 2**m.
+_MAX_PAULI_TERMS = 64
+# Products of distinct Pauli factors; the identity and equal factors are handled in code.
+_PAULI_PRODUCT: dict[tuple[str, str], tuple[complex, str]] = {
+    ("X", "Y"): (1j, "Z"),
+    ("Y", "X"): (-1j, "Z"),
+    ("Y", "Z"): (1j, "X"),
+    ("Z", "Y"): (-1j, "X"),
+    ("Z", "X"): (1j, "Y"),
+    ("X", "Z"): (-1j, "Y"),
+}
 
 
 def is_digital_noise_opportunity(operation: Operation) -> bool:
@@ -519,6 +533,179 @@ class _ControlledGate(BaseGate):
         )
 
 
+def _pauli_product(left: str, right: str) -> tuple[complex, str]:
+    """Return ``(phase, label)`` such that ``left @ right == phase * label``.
+
+    Args:
+        left: Pauli label on the left.
+        right: Pauli label on the right.
+
+    Returns:
+        The phase and the resulting Pauli label.
+    """
+    if left == "I":
+        return 1.0, right
+    if right == "I":
+        return 1.0, left
+    if left == right:
+        return 1.0, "I"
+    return _PAULI_PRODUCT[left, right]
+
+
+def _rotation_terms(
+    labels: list[str], coeffs: list[float], time: float
+) -> list[tuple[ExactComplex, dict[int, str]]] | None:
+    """Expand ``exp(-i time sum_k coeffs_k P_k)`` of commuting ``P_k`` into Pauli strings with exact coefficients.
+
+    Args:
+        labels: Pauli labels in Qiskit order, one per term.
+        coeffs: Real coefficient of each term.
+        time: Evolution time of the gate.
+
+    Returns:
+        ``(coefficient, {factor position: Pauli label})`` pairs, or ``None`` above the term budget.
+    """
+    zero = ExactComplex.of(0)
+    accumulated: dict[tuple[tuple[int, str], ...], ExactComplex] = {(): ExactComplex.of(1)}
+    for label, coeff in zip(labels, coeffs, strict=True):
+        angle = time * coeff
+        # Each factor is cos(angle) I - i sin(angle) P_k.
+        cosine, sine = ExactComplex.of(np.cos(angle)), ExactComplex.of(-1j * np.sin(angle))
+        factors = {factor: op for factor, op in enumerate(reversed(label)) if op != "I"}
+        expanded: dict[tuple[tuple[int, str], ...], ExactComplex] = {}
+        for key, value in accumulated.items():
+            expanded[key] = expanded.get(key, zero) + value * cosine
+            merged, phase = dict(key), sine
+            for factor, op in factors.items():
+                step, result = _pauli_product(merged.get(factor, "I"), op)
+                phase *= ExactComplex.of(step)
+                if result == "I":
+                    merged.pop(factor, None)
+                else:
+                    merged[factor] = result
+            product_key = tuple(sorted(merged.items()))
+            expanded[product_key] = expanded.get(product_key, zero) + value * phase
+        accumulated = {key: value for key, value in expanded.items() if value}
+        if len(accumulated) > _MAX_PAULI_TERMS:
+            return None
+    return [(value, dict(key)) for key, value in accumulated.items()]
+
+
+def _pauli_sum_tensors(
+    terms: Sequence[tuple[complex | ExactComplex, dict[int, str]]], sites: list[int]
+) -> list[NDArray[np.complex128]]:
+    """Return the MPO of a sum of Pauli strings over the span of ``sites``, at the minimal bond.
+
+    Args:
+        terms: ``(coefficient, {factor position: Pauli label})`` pairs.
+        sites: Physical site of each factor position.
+
+    Returns:
+        Tensors ``(out, in, left, right)`` from the first to the last site of the span.
+    """
+    first_site = min(sites)
+    strings = [
+        (coeff, {sites[factor] - first_site: _PAULI_MATRIX[label] for factor, label in factors.items()})
+        for coeff, factors in terms
+    ]
+    return sum_of_products_tensors(strings, max(sites) - first_site + 1)
+
+
+class _PauliSumGate(BaseGate):
+    """Gate given by a short sum of Pauli strings, without a dense ``matrix`` or ``tensor``."""
+
+    def __init__(self, terms: Sequence[tuple[complex | ExactComplex, dict[int, str]]], num_sites: int) -> None:
+        """Store the Pauli-string terms and the number of sites they act on.
+
+        Args:
+            terms: ``(coefficient, {factor position: Pauli label})`` pairs.
+            num_sites: Number of sites the gate acts on.
+        """
+        self._terms = terms
+        self.interaction = num_sites
+
+    def set_sites(self, *sites: int | list[int]) -> None:
+        """Bind the sites in factor order and build the MPO.
+
+        Args:
+            *sites: Site indices or lists of indices, in the gate's factor order.
+
+        Raises:
+            ValueError: If the site count differs from ``interaction``.
+        """
+        sites_list: list[int] = []
+        for s in sites:
+            if isinstance(s, int):
+                sites_list.append(s)
+            else:
+                sites_list.extend(s)
+
+        if len(sites_list) != self.interaction:
+            msg = f"Number of sites {len(sites_list)} must be equal to the interaction level {self.interaction}"
+            raise ValueError(msg)
+
+        self.sites = sites_list
+        self.mpo_tensors = _pauli_sum_tensors(self._terms, sites_list)
+
+
+def _translate_pauli_evolution(op: PauliEvolutionGate, *, name: str, sites: list[int]) -> BaseGate | None:
+    """Build a Pauli-string rotation from its terms, or return ``None`` to fall back.
+
+    Args:
+        op: Qiskit Pauli evolution gate.
+        name: Qiskit operation name to store on the YAQS gate.
+        sites: Qubit indices in the gate's factor order.
+
+    Returns:
+        The gate, or ``None`` if its operator is not a commuting real Pauli sum within budget.
+    """
+    operator = op.operator
+    if not isinstance(operator, SparsePauliOp) or operator.num_qubits != len(sites):
+        return None
+    try:
+        time = float(op.time)
+    except (TypeError, ValueError):
+        return None
+    labels = list(operator.paulis.to_labels())
+    if any(set(label) - _PAULI_LABELS for label in labels):
+        return None
+    # Qiskit rejects complex coefficients when the gate is built, so the generator is Hermitian.
+    coeffs = [float(complex(value).real) for value in operator.coeffs]
+    # Terms i and j commute iff x_i . z_j + z_i . x_j is even, checked for all pairs at once.
+    x_bits = operator.paulis.x.astype(np.int32)
+    z_bits = operator.paulis.z.astype(np.int32)
+    if ((x_bits @ z_bits.T + z_bits @ x_bits.T) % 2).any():
+        return None
+    terms = _rotation_terms(labels, coeffs, time)
+    if terms is None:
+        return None
+    gate = _PauliSumGate(terms, len(sites))
+    gate.name = name
+    gate.set_sites(*sites)
+    return gate
+
+
+def _translate_pauli_string(op: PauliGate, *, name: str, sites: list[int]) -> BaseGate | None:
+    """Build a Pauli string from its label, or return ``None`` to fall back.
+
+    Args:
+        op: Qiskit Pauli gate.
+        name: Qiskit operation name to store on the YAQS gate.
+        sites: Qubit indices in the gate's factor order.
+
+    Returns:
+        The gate, or ``None`` if the label is not a plain Pauli string on these sites.
+    """
+    label = op.params[0] if op.params else None
+    if not isinstance(label, str) or len(label) != len(sites) or set(label) - _PAULI_LABELS:
+        return None
+    factors = {factor: single for factor, single in enumerate(reversed(label)) if single != "I"}
+    gate = _PauliSumGate([(1.0 + 0j, factors)], len(sites))
+    gate.name = name
+    gate.set_sites(*sites)
+    return gate
+
+
 def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
     """Return ``(base gate, number of controls, control state, number of targets)``, else ``None``.
 
@@ -658,6 +845,14 @@ def _translate_node(dag: DAGCircuit | None, node: DAGOpNode) -> BaseGate:
                 )
                 if gate is not None:
                     return gate
+            if isinstance(op, PauliEvolutionGate):
+                gate = _translate_pauli_evolution(op, name=name, sites=sites)
+                if gate is not None:
+                    return gate
+            if isinstance(op, PauliGate):
+                gate = _translate_pauli_string(op, name=name, sites=sites)
+                if gate is not None:
+                    return gate
         return _translate_matrix(op, name=name, sites=sites)
 
     try:
@@ -677,8 +872,9 @@ def convert_dag_to_tensor_algorithm(dag: DAGCircuit) -> list[BaseGate]:
     For each node, it retrieves the corresponding gate class from the GateLibrary, initializes it, sets any
     parameters if present, and assigns the qubit indices (sites) on which the gate acts.
 
-    From three qubits on, controlled gates are built as an MPO from their parts. Other unknown unitary
-    Qiskit gates on up to eight qubits are converted from their matrix representation.
+    From three qubits on, controlled gates, Pauli rotations and Pauli strings are built as an MPO from
+    their parts. Other unknown unitary Qiskit gates on up to eight qubits are converted from their
+    matrix representation.
     ``barrier`` nodes are skipped. ``measure``, ``reset``, ``delay``, classically controlled ops,
     and control-flow instructions are rejected. See :data:`SUPPORTED_QISKIT_GATE_NAMES` for
     hardcoded gate names.

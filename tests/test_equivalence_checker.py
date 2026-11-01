@@ -28,6 +28,7 @@ from qiskit.circuit.library import (
     ECRGate,
     MCMTGate,
     MCXGate,
+    PauliEvolutionGate,
     PauliGate,
     SwapGate,
     U1Gate,
@@ -37,7 +38,7 @@ from qiskit.circuit.library import (
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.qasm2 import load, loads
-from qiskit.quantum_info import Operator
+from qiskit.quantum_info import Operator, SparsePauliOp
 
 import mqt.yaqs.equivalence_checker as equivalence_checker_module
 from mqt.yaqs import EquivalenceChecker, NoiseModel
@@ -678,6 +679,7 @@ def test_matrix_backend_supports_multi_qubit_gates() -> None:
         pytest.param(lambda: SwapGate().control(2, annotated=False), [0, 3, 1, 4], id="controlled-swap"),
         pytest.param(lambda: MCMTGate(XGate(), 2, 3), [0, 4, 1, 2, 3], id="multi-target"),
         pytest.param(lambda: PauliGate("XYZ").control(2, annotated=False), [0, 1, 2, 3, 4], id="controlled-pauli"),
+        pytest.param(lambda: PauliEvolutionGate(SparsePauliOp(["XZZX"]), time=0.3), [4, 0, 2, 1], id="pauli-rotation"),
     ],
 )
 def test_matrix_backend_checks_gates_built_from_their_parts(make_gate: Callable[[], Gate], qubits: list[int]) -> None:

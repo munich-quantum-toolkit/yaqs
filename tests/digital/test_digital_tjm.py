@@ -21,6 +21,7 @@ from qiskit.circuit.library import (
     MCMTGate,
     MCPhaseGate,
     MCXGate,
+    PauliEvolutionGate,
     PauliGate,
     RYGate,
     RZXGate,
@@ -29,7 +30,7 @@ from qiskit.circuit.library import (
     ZGate,
 )
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
+from qiskit.quantum_info import Choi, Operator, Pauli, SparsePauliOp, Statevector, SuperOp
 from scipy.linalg import expm
 
 import mqt.yaqs.digital.digital_tjm as digital_module
@@ -3583,3 +3584,99 @@ def test_direct_digital_shots_do_not_create_pool(monkeypatch: pytest.MonkeyPatch
         _, _, counts, _ = digital_tjm((0, MPS(2, state="zeros"), None, params, circuit), show_progress=False)
     pool.assert_not_called()
     assert counts == {1: 6}
+
+
+def _embedded_pauli_sum(num_qubits: int, qubits: list[int], labels: list[str], coeffs: list[float]) -> np.ndarray:
+    """Return ``sum_k coeffs_k P_k`` on the whole register, with factor ``q`` placed on ``qubits[q]``."""
+    operator = np.zeros((2**num_qubits, 2**num_qubits), dtype=np.complex128)
+    for label, coeff in zip(labels, coeffs, strict=True):
+        full = ["I"] * num_qubits
+        for factor, single in enumerate(reversed(label)):
+            full[qubits[factor]] = single
+        operator += coeff * SparsePauliOp(["".join(reversed(full))]).to_matrix()
+    return operator
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps", "tdvp", "full-tdvp"])
+@pytest.mark.parametrize(
+    ("labels", "coeffs", "time", "qubits"),
+    [
+        pytest.param(["XYZXZYXZZ"], [1.0], 0.31, [8, 1, 6, 3, 0, 9, 2, 7, 4], id="rotation-unsorted-with-spectator"),
+        pytest.param(
+            ["X" + "Z" * 8 + "X", "Y" + "Z" * 8 + "Y"],
+            [0.3, -0.2],
+            0.25,
+            list(range(10)),
+            id="jordan-wigner-hopping",
+        ),
+        pytest.param(
+            ["ZZIIIIIIII", "IIZZIIIIII", "ZZZZIIIIII"],
+            [0.4, 0.5, 0.6],
+            0.2,
+            list(range(10)),
+            id="three-commuting-terms",
+        ),
+        pytest.param(["XYZXYZXYZ"], [1.0], None, [8, 1, 6, 3, 0, 9, 2, 7, 4], id="pauli-string-unsorted"),
+    ],
+)
+def test_wide_pauli_gate_statevector(
+    labels: list[str], coeffs: list[float], time: float | None, qubits: list[int], gate_mode: GateMode
+) -> None:
+    """A Pauli gate on more than eight qubits should match its dense definition in every gate mode.
+
+    The reference applies the operator built from the labels, so it never asks Qiskit to
+    synthesise the gate.
+    """
+    num_qubits = 10
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    qc = QuantumCircuit(num_qubits)
+    for qubit in range(num_qubits):
+        qc.ry(float(rng.uniform(0.4, 2.7)), qubit)
+    prologue = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    operator = _embedded_pauli_sum(num_qubits, qubits, labels, coeffs)
+    if time is None:
+        gate: Gate = PauliGate(labels[0])
+        reference = operator @ prologue
+    else:
+        gate = PauliEvolutionGate(SparsePauliOp(labels, coeffs=np.asarray(coeffs)), time=time)
+        reference = expm(-1j * time * operator) @ prologue
+    qc.append(gate, qubits)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    assert _fidelity(reference, vec) == pytest.approx(1.0, abs=1e-10)
+
+
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps", "tdvp", "full-tdvp"])
+@pytest.mark.parametrize(
+    ("labels", "coeffs", "time", "qubits"),
+    [
+        pytest.param(["XZZX"], [1.0], 0.31, [3, 0, 4, 1], id="rotation-unsorted-with-spectator"),
+        pytest.param(["XZZZX", "YZZZY"], [0.3, -0.2], 0.25, list(range(5)), id="jordan-wigner-hopping"),
+        pytest.param(["XYZ"], [1.0], None, [4, 1, 2], id="pauli-string-unsorted"),
+    ],
+)
+def test_pauli_gate_from_three_qubits_statevector(
+    labels: list[str], coeffs: list[float], time: float | None, qubits: list[int], gate_mode: GateMode
+) -> None:
+    """A Pauli gate on three to eight qubits, built from its terms, matches its definition in every gate mode."""
+    num_qubits = 5
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    qc = QuantumCircuit(num_qubits)
+    for qubit in range(num_qubits):
+        qc.ry(float(rng.uniform(0.4, 2.7)), qubit)
+    prologue = np.asarray(Statevector(qc).data, dtype=np.complex128)
+
+    operator = _embedded_pauli_sum(num_qubits, qubits, labels, coeffs)
+    if time is None:
+        gate: Gate = PauliGate(labels[0])
+        reference = operator @ prologue
+    else:
+        gate = PauliEvolutionGate(SparsePauliOp(labels, coeffs=np.asarray(coeffs)), time=time)
+        reference = expm(-1j * time * operator) @ prologue
+    qc.append(gate, qubits)
+
+    vec = _run_digital_observables_noiseless(qc, gate_mode=gate_mode, get_state=True)
+    assert isinstance(vec, np.ndarray)
+    assert _fidelity(reference, vec) == pytest.approx(1.0, abs=1e-10)
