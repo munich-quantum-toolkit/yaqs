@@ -390,11 +390,15 @@ layout. The same input works with `shots`, noise, and sampling checkpoints under
 the circuit rules described above.
 
 Custom gate bodies in {ref}`circuit-qasm-inputs` follow the same translation
-path. Unknown unitary operations use a matrix fallback on up to eight qubits;
-decompose larger operations first. A matrix-backed gate has no analytic
-generator: TDVP gate modes use direct local updates for adjacent pairs and the
-MPO path for separated sites or larger gates. Keep `gate_mode="mpo"` unless you
-need another method.
+path. Some Qiskit gates on three or more qubits build their MPO directly from
+their parts, at any width: a controlled gate without ancillas, such as
+`MCXGate`, `MCPhaseGate` or `MCMTGate`, a Pauli-string rotation
+`PauliEvolutionGate` whose terms commute, and a `PauliGate`. Other unknown
+unitary operations use a matrix fallback on up to eight qubits. Decompose any
+other larger operation first, including an OpenQASM 2 gate body. A matrix-backed
+gate has no analytic generator: TDVP gate modes use direct local updates for
+adjacent pairs and the MPO path for separated sites or larger gates. Keep
+`gate_mode="mpo"` unless you need another method.
 
 :::{dropdown} Supported instructions and gate translation
 
