@@ -50,8 +50,11 @@ from qiskit.circuit.library import (
     GlobalPhaseGate,
     HGate,
     IGate,
+    MCMTGate,
     MCXGate,
+    PauliGate,
     RXXGate,
+    RYGate,
     RYYGate,
     RZXGate,
     RZZGate,
@@ -1174,6 +1177,141 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
     assert second_iter == range(0, 3, 2), "Then the even qubit pairs."
 
 
+def test_wide_multi_target_gate_builds_its_mpo_without_a_matrix() -> None:
+    """A controlled gate with more than eight targets is built from its one-qubit factors."""
+    qc = QuantumCircuit(12)
+    qc.append(MCMTGate(XGate(), 3, 9), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert gate.interaction == 12
+    assert not hasattr(gate, "matrix")
+    assert not hasattr(gate, "generator")
+    # The difference of a product telescopes into two states, so the channel carries bond two.
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2] * 11
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "gate", "qubits", "bonds"),
+    [
+        pytest.param(9, MCMTGate(XGate(), 3, 6), list(range(9)), [2] * 8, id="fan-out-contiguous"),
+        pytest.param(
+            9,
+            MCMTGate(XGate(), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            [2, 3, 3, 3, 3, 3, 3, 2],
+            id="fan-out-with-controls-spread-out",
+        ),
+        pytest.param(
+            11,
+            MCMTGate(XGate(), 3, 6),
+            [0, 1, 2, 4, 5, 6, 8, 9, 10],
+            [2] * 10,
+            id="fan-out-with-spectators",
+        ),
+        pytest.param(9, MCMTGate(RYGate(0.3), 2, 7), list(range(9)), [2] * 8, id="fan-out-of-a-rotation"),
+        pytest.param(9, MCMTGate(XGate(), 7, 2), list(range(9)), [2] * 8, id="several-targets-of-one-base"),
+        pytest.param(9, MCMTGate(PauliGate("X"), 3, 6), list(range(9)), [2] * 8, id="fan-out-of-a-pauli-gate"),
+        pytest.param(
+            9, MCMTGate(IGate(), 3, 6), [0, 4, 8, 1, 2, 3, 5, 6, 7], [1] * 8, id="identity-target-controls-spread-out"
+        ),
+        pytest.param(
+            9,
+            MCMTGate(UnitaryGate(np.exp(0.3j) * np.eye(2)), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            [2] * 8,
+            id="phase-target-controls-spread-out",
+        ),
+        pytest.param(
+            11,
+            PauliGate("IIIIIIIIX").control(2),
+            [0, 10, *range(1, 10)],
+            [2] * 10,
+            id="identity-letters-around-one-factor",
+        ),
+        pytest.param(
+            11,
+            PauliGate("IIXYZXYII").control(2),
+            [0, 10, *range(1, 10)],
+            [2, 2, 2, 3, 3, 3, 3, 2, 2, 2],
+            id="identity-letters-at-the-edges",
+        ),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3),
+            list(range(10)),
+            [2] * 9,
+            id="controlled-pauli-string",
+        ),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3, ctrl_state=0b010),
+            [9, 0, 5, 1, 2, 3, 4, 6, 7, 8],
+            [2, 3, 3, 3, 3, 3, 3, 3, 2],
+            id="controlled-pauli-string-unsorted",
+        ),
+    ],
+)
+def test_wide_multi_target_gate_mpo_has_the_minimal_bond(
+    num_qubits: int, gate: Gate, qubits: list[int], bonds: list[int]
+) -> None:
+    """A controlled product target carries the minimal bond, also when some or all of its factors are phases."""
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "gate", "qubits"),
+    [
+        pytest.param(9, MCMTGate(XGate(), 3, 6), list(range(9)), id="fan-out-of-x"),
+        pytest.param(9, MCMTGate(HGate(), 3, 6), list(range(9)), id="fan-out-of-h"),
+        pytest.param(9, MCMTGate(RYGate(0.3), 2, 7), list(range(9)), id="fan-out-of-a-rotation"),
+        pytest.param(9, MCMTGate(XGate(), 7, 2), list(range(9)), id="two-targets-of-one-base"),
+        pytest.param(9, MCMTGate(IGate(), 3, 6), list(range(9)), id="identity-target"),
+        pytest.param(9, MCMTGate(PauliGate("Y"), 3, 6), list(range(9)), id="fan-out-of-a-pauli-gate"),
+        pytest.param(
+            9,
+            MCMTGate(UnitaryGate(np.exp(0.3j) * np.eye(2)), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            id="phase-target-controls-spread-out",
+        ),
+        pytest.param(11, PauliGate("IIXYZXYII").control(2), [0, 10, *range(1, 10)], id="identity-letters-at-the-edges"),
+        pytest.param(10, PauliGate("XYZXYZXYZ").control(1), list(range(10)), id="one-control-nine-targets"),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3, ctrl_state=0b010),
+            [9, 0, 5, 1, 2, 3, 4, 6, 7, 8],
+            id="controlled-pauli-string-unsorted",
+        ),
+    ],
+)
+def test_wide_multi_target_gate_matches_the_dense_gate(num_qubits: int, gate: Gate, qubits: list[int]) -> None:
+    """A controlled product target equals its definition for any base, order and control pattern."""
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert_allclose(MPO.from_gate(yaqs_gate, num_qubits).to_matrix(), Operator(qc).data, atol=1e-12)
+
+
+def test_wide_multi_target_gate_survives_pickling() -> None:
+    """A wide multi-target gate keeps its MPO through pickling, as trajectory workers receive it."""
+    qc = QuantumCircuit(12)
+    qc.append(MCMTGate(XGate(), 3, 9), range(12))
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    restored = pickle.loads(pickle.dumps(gate))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sites == gate.sites
+    for original, copied in zip(gate.mpo_tensors, restored.mpo_tensors, strict=True):
+        assert_allclose(copied, original, atol=0.0)
+
+
 @pytest.mark.parametrize(
     ("gate", "qubits", "bonds"),
     [
@@ -1184,6 +1322,11 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
         pytest.param(CCXGate(ctrl_state=1), [0, 1, 2], [2, 2], id="toffoli-with-an-open-control"),
         pytest.param(CSwapGate(ctrl_state=0), [0, 1, 2], [2, 4], id="fredkin-with-an-open-control"),
         pytest.param(SwapGate().control(2, annotated=False), [0, 1, 2, 3], [2, 2, 4], id="swap-with-two-controls"),
+        pytest.param(MCMTGate(XGate(), 3, 5), list(range(8)), [2] * 7, id="multi-target-on-eight-qubits"),
+        pytest.param(MCMTGate(XGate(), 1, 2), [1, 0, 2], [2, 2], id="multi-target-control-between"),
+        pytest.param(
+            PauliGate("XYZ").control(2, annotated=False), list(range(5)), [2] * 4, id="controlled-pauli-string"
+        ),
     ],
 )
 def test_gate_from_three_qubits_is_built_from_its_parts(gate: Gate, qubits: list[int], bonds: list[int]) -> None:

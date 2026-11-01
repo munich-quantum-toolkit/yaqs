@@ -37,6 +37,7 @@ from qiskit.circuit import (
     Parameter,
     ParameterExpression,
 )
+from qiskit.circuit.library import PauliGate
 from qiskit.converters import dag_to_circuit
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.exceptions import QiskitError
@@ -49,6 +50,9 @@ from ...core.data_structures.mpo_utils import make_identity_site
 from ...core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
 from ...core.libraries.operator_matrices import (
     IDENTITY,
+    PAULI_X,
+    PAULI_Y,
+    PAULI_Z,
     PROJECTOR_ONE,
     PROJECTOR_ZERO,
 )
@@ -248,6 +252,8 @@ def _reject_unsupported(node: DAGOpNode) -> None:
 _MAX_MATRIX_FALLBACK_QUBITS = 8
 # Narrower gates keep their dense matrix, which the one- and two-site paths read directly.
 _MIN_PARTS_QUBITS = 3
+_PAULI_LABELS = frozenset("IXYZ")
+_PAULI_MATRIX = {"I": IDENTITY, "X": PAULI_X, "Y": PAULI_Y, "Z": PAULI_Z}
 
 
 def is_digital_noise_opportunity(operation: Operation) -> bool:
@@ -468,18 +474,19 @@ class _ControlledGate(BaseGate):
 
     def __init__(
         self,
-        target: NDArray[np.complex128],
+        target: NDArray[np.complex128] | list[NDArray[np.complex128]],
         control_values: list[int],
     ) -> None:
-        """Store the target operator and the value each control must read.
+        """Store the target operator, or its one-qubit factors, and the value each control must read.
 
         Args:
-            target: Target unitary in YAQS factor order.
+            target: Target unitary in YAQS factor order, or one factor per target.
             control_values: Required value of each control, in control order.
         """
         self._target = target
         self._control_values = control_values
-        self.interaction = len(control_values) + int(np.log2(target.shape[0]))
+        num_targets = len(target) if isinstance(target, list) else int(np.log2(target.shape[0]))
+        self.interaction = len(control_values) + num_targets
 
     def set_sites(self, *sites: int | list[int]) -> None:
         """Bind the controls, then the targets, and build the MPO.
@@ -505,7 +512,11 @@ class _ControlledGate(BaseGate):
         num_controls = len(self._control_values)
         controls = dict(zip(sites_list[:num_controls], self._control_values, strict=True))
         targets = sites_list[num_controls:]
-        self.mpo_tensors = _controlled_gate_mpo(controls, targets, self._target)
+        self.mpo_tensors = (
+            _controlled_product_mpo(controls, targets, self._target)
+            if isinstance(self._target, list)
+            else _controlled_gate_mpo(controls, targets, self._target)
+        )
 
 
 def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
@@ -519,8 +530,9 @@ def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
     """
     if isinstance(op, ControlledGate):
         base = op.base_gate
-        # Any qubit beyond the controls and the base is an ancilla, which the width check rejects.
-        num_targets = 0 if base is None else base.num_qubits
+        # Only a multi-target gate declares a target count; other extra qubits are ancillas.
+        declared = getattr(op, "num_target_qubits", None)
+        num_targets = declared if declared is not None else (0 if base is None else base.num_qubits)
         return base, op.num_ctrl_qubits, op.ctrl_state, num_targets
     # Qiskit 3.0 returns an AnnotatedOperation from Gate.control(); one control modifier is the flat gate.
     if isinstance(op, AnnotatedOperation) and len(op.modifiers) == 1:
@@ -534,6 +546,35 @@ def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
             if isinstance(ctrl_state, int):
                 return op.base_op, num_controls, ctrl_state, num_targets
     return None
+
+
+def _target_factors(base: Gate, num_targets: int, *, name: str) -> list[NDArray[np.complex128]] | None:
+    """Return the one-qubit factors of a target block that is their tensor product, or ``None``.
+
+    Args:
+        base: Target operator of the controlled gate.
+        num_targets: Number of target qubits the gate declares.
+        name: Qiskit operation name, for the error of a base without a matrix.
+
+    Returns:
+        One factor per target, or ``None`` if the block is not a product of one-qubit factors.
+    """
+    label = base.params[0] if isinstance(base, PauliGate) and base.params else None
+    if isinstance(label, str) and len(label) == num_targets:
+        # Label character ``label[-1 - j]`` acts on base qubit ``j``, so the factors run reversed.
+        if set(label) - _PAULI_LABELS:
+            return None
+        return [_PAULI_MATRIX[single] for single in reversed(label)]
+    # Any other base acts on one qubit and repeats on every target, as in ``MCMTGate``.
+    if base.num_qubits != 1:
+        return None
+    try:
+        factor = _extract_matrix(base, name=name)
+    except ValueError:
+        return None
+    if not _is_unitary(factor):
+        return None
+    return [factor] * num_targets
 
 
 def _translate_controlled(
@@ -560,7 +601,10 @@ def _translate_controlled(
     """
     if base is None or num_controls < 1 or num_targets < 1 or num_controls + num_targets != len(sites):
         return None
-    target: NDArray[np.complex128] | None = None
+    target: NDArray[np.complex128] | list[NDArray[np.complex128]] | None = None
+    if num_targets >= 2:
+        # A product of one-qubit factors needs no target matrix at any width.
+        target = _target_factors(base, num_targets, name=name)
     if target is None and num_targets <= _MAX_MATRIX_FALLBACK_QUBITS and base.num_qubits == num_targets:
         try:
             target_matrix = _extract_matrix(base, name=name)

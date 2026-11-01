@@ -18,10 +18,14 @@ import numpy as np
 import pytest
 from qiskit.circuit import AncillaRegister, QuantumCircuit, QuantumRegister, Qubit
 from qiskit.circuit.library import (
+    MCMTGate,
     MCPhaseGate,
     MCXGate,
+    PauliGate,
+    RYGate,
     RZXGate,
     SwapGate,
+    XGate,
     ZGate,
 )
 from qiskit.converters import circuit_to_dag
@@ -2427,6 +2431,19 @@ def test_cswap_statevector(gate_mode: GateMode) -> None:
             list(range(10)),
             id="annotated-controlled-z",
         ),
+        pytest.param(12, lambda: MCMTGate(XGate(), 3, 9), list(range(12)), id="multi-target-x"),
+        pytest.param(
+            11,
+            lambda: MCMTGate(RYGate(0.6), 2, 8),
+            [0, 4, 1, 2, 3, 5, 6, 7, 8, 9],
+            id="multi-target-rotation-interleaved",
+        ),
+        pytest.param(
+            12,
+            lambda: PauliGate("XYZXYZXYZ").control(2),
+            [0, 1, *range(3, 12)],
+            id="controlled-pauli-string",
+        ),
     ],
 )
 def test_wide_controlled_gate_statevector(
@@ -2451,6 +2468,8 @@ def test_wide_controlled_gate_statevector(
     [
         pytest.param(lambda: MCXGate(3, ctrl_state=0b101), [0, 3, 1, 4], id="mcx-open-controls-with-spectator"),
         pytest.param(lambda: SwapGate().control(1, annotated=False, ctrl_state=0), [3, 0, 2], id="fredkin-open"),
+        pytest.param(lambda: MCMTGate(XGate(), 2, 3), [0, 4, 1, 2, 3], id="multi-target-interleaved"),
+        pytest.param(lambda: PauliGate("XYZ").control(2, annotated=False), list(range(5)), id="controlled-pauli"),
     ],
 )
 def test_controlled_gate_from_three_qubits_statevector(
