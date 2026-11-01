@@ -41,6 +41,7 @@ from qiskit.circuit.library import (
     CCXGate,
     CPhaseGate,
     CRZGate,
+    CSwapGate,
     CUGate,
     CXGate,
     GlobalPhaseGate,
@@ -53,6 +54,7 @@ from qiskit.circuit.library import (
     RZZGate,
     SdgGate,
     SGate,
+    SwapGate,
     SXdgGate,
     TdgGate,
     TGate,
@@ -533,6 +535,15 @@ def test_wide_controlled_gate_builds_its_mpo_without_a_matrix() -> None:
             [2] * 8 + [1, 1],
             id="phase-target",
         ),
+        # The controls lie left of SWAP, so the cut between its targets carries the rank 4 of SWAP - I.
+        pytest.param(SwapGate().control(8, annotated=False), list(range(10)), [2] * 8 + [4], id="controlled-swap"),
+        # The same with the controls right of SWAP: the reduction acts on the cut before the first control.
+        pytest.param(
+            SwapGate().control(8, annotated=False),
+            [*range(2, 10), 0, 1],
+            [4] + [2] * 8,
+            id="controlled-swap-targets-first",
+        ),
         # A phase on two targets also acts on the controls alone, on either side of them.
         pytest.param(_controlled(UnitaryGate(-np.eye(4)), 8), list(range(10)), [2] * 7 + [1, 1], id="two-target-phase"),
         pytest.param(
@@ -540,6 +551,13 @@ def test_wide_controlled_gate_builds_its_mpo_without_a_matrix() -> None:
             [*range(2, 10), 0, 1],
             [1, 1] + [2] * 7,
             id="two-target-phase-targets-first",
+        ),
+        # U - I has rank 4 across its targets: 4 past the outer controls, 1 + 4 between them.
+        pytest.param(
+            _controlled(UnitaryGate(_haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED))), 8),
+            [*range(1, 9), 0, 9],
+            [4] + [5] * 7 + [4],
+            id="targets-outside-the-controls",
         ),
     ],
 )
@@ -565,6 +583,27 @@ def test_wide_controlled_gate_mpo_has_the_minimal_bond(gate: Gate, qubits: list[
         ),
         pytest.param(
             10,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 1},
+            [9, 4],
+            _haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED)),
+            id="two-targets-descending",
+        ),
+        pytest.param(
+            10,
+            {1: 1, 2: 0, 3: 1, 4: 1, 5: 0, 6: 0, 7: 1, 8: 1},
+            [9, 0],
+            _haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED)),
+            id="targets-at-both-ends",
+        ),
+        pytest.param(
+            10,
+            {0: 1, 1: 0, 2: 1, 3: 0, 4: 1, 6: 1, 8: 0},
+            [9, 5, 7],
+            _haar_unitary(8, np.random.default_rng(YAQS_TEST_SEED)),
+            id="three-targets-cycled",
+        ),
+        pytest.param(
+            10,
             {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 0, 8: 1, 9: 1},
             [4],
             np.exp(0.3j) * np.eye(2),
@@ -585,6 +624,40 @@ def test_wide_controlled_gate_matches_the_dense_gate(
 
     expected = _dense_controlled_gate(num_qubits, controls, targets, target_matrix)
     assert_allclose(MPO.from_gate(gate, num_qubits).to_matrix(), expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("gate", "targets", "target_in", "target_out", "expected"),
+    [
+        pytest.param(_controlled(SwapGate(), 100), [100, 101], [0, 1], [1, 0], 1.0, id="swap-after-100-controls"),
+        pytest.param(
+            _controlled(UnitaryGate(np.diag(np.exp(-1e-6j * np.array([1, -1, -1, 1])))), 40),
+            [0, 1],
+            [0, 0],
+            [0, 0],
+            np.exp(-1e-6j),
+            id="near-identity-before-40-controls",
+        ),
+    ],
+)
+def test_wide_controlled_gate_keeps_its_action_under_many_controls(
+    gate: ControlledGate, targets: list[int], target_in: list[int], target_out: list[int], expected: complex
+) -> None:
+    """The bond reduction keeps the controlled part, which the identity outweighs by 2**(m/2) in norm."""
+    num_qubits = gate.num_qubits
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, [*(site for site in range(num_qubits) if site not in targets), *targets])
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    bits_in, bits_out = [1] * num_qubits, [1] * num_qubits
+    for site, bit_in, bit_out in zip(targets, target_in, target_out, strict=True):
+        bits_in[site], bits_out[site] = bit_in, bit_out
+    amplitude = np.linalg.multi_dot([
+        tensor[bit_out, bit_in]
+        for tensor, bit_in, bit_out in zip(yaqs_gate.mpo_tensors, bits_in, bits_out, strict=True)
+    ])
+    assert amplitude[0, 0] == pytest.approx(expected, abs=1e-12)
 
 
 @pytest.mark.parametrize(
@@ -1071,6 +1144,8 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
         pytest.param(MCXGate(7, ctrl_state=0b1011001), [0, 1, 2, 3, 5, 6, 7, 4], [2] * 7, id="mcx-target-inside"),
         # Open controls give names outside the gate library, such as ``ccx_o1`` and ``cswap_o0``.
         pytest.param(CCXGate(ctrl_state=1), [0, 1, 2], [2, 2], id="toffoli-with-an-open-control"),
+        pytest.param(CSwapGate(ctrl_state=0), [0, 1, 2], [2, 4], id="fredkin-with-an-open-control"),
+        pytest.param(SwapGate().control(2, annotated=False), [0, 1, 2, 3], [2, 2, 4], id="swap-with-two-controls"),
     ],
 )
 def test_gate_from_three_qubits_is_built_from_its_parts(gate: Gate, qubits: list[int], bonds: list[int]) -> None:

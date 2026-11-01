@@ -20,6 +20,8 @@ from qiskit.circuit import AncillaRegister, QuantumCircuit, QuantumRegister, Qub
 from qiskit.circuit.library import (
     MCPhaseGate,
     MCXGate,
+    RZXGate,
+    SwapGate,
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Choi, Operator, Pauli, Statevector, SuperOp
@@ -2411,6 +2413,13 @@ def test_cswap_statevector(gate_mode: GateMode) -> None:
             id="mcx-open-controls-unsorted",
         ),
         pytest.param(12, lambda: MCPhaseGate(0.7, 9), [0, 1, 2, 4, 5, 7, 8, 10, 11, 6], id="mcphase-with-spectators"),
+        pytest.param(12, lambda: SwapGate().control(8, annotated=False), [*range(8), 10, 11], id="controlled-swap"),
+        pytest.param(
+            11,
+            lambda: RZXGate(0.9).control(7, annotated=False),
+            [*range(7), 10, 8],
+            id="controlled-rzx-descending-targets",
+        ),
     ],
 )
 def test_wide_controlled_gate_statevector(
@@ -2434,6 +2443,7 @@ def test_wide_controlled_gate_statevector(
     ("make_gate", "qubits"),
     [
         pytest.param(lambda: MCXGate(3, ctrl_state=0b101), [0, 3, 1, 4], id="mcx-open-controls-with-spectator"),
+        pytest.param(lambda: SwapGate().control(1, annotated=False, ctrl_state=0), [3, 0, 2], id="fredkin-open"),
     ],
 )
 def test_controlled_gate_from_three_qubits_statevector(

@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import opt_einsum as oe
 from qiskit.circuit import (
     ControlledGate,
     Gate,
@@ -39,13 +40,17 @@ from qiskit.dagcircuit import DAGOpNode
 from qiskit.exceptions import QiskitError
 from qiskit.quantum_info import Operator
 
+from ...core import linalg
 from ...core.data_structures._sum_of_products import sum_of_products_tensors
-from ...core.libraries.gate_library import BaseGate, GateLibrary
+from ...core.data_structures.mpo import MPO
+from ...core.data_structures.mpo_utils import make_identity_site
+from ...core.libraries.gate_library import BaseGate, GateLibrary, extend_gate
 from ...core.libraries.operator_matrices import (
     IDENTITY,
     PROJECTOR_ONE,
     PROJECTOR_ZERO,
 )
+from ...core.methods.decompositions import right_qr
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -311,6 +316,80 @@ def _translate_matrix(op: Operation, *, name: str, sites: list[int]) -> BaseGate
     return gate
 
 
+def _reduce_end_block(
+    tensors: list[NDArray[np.complex128]],
+) -> tuple[NDArray[np.complex128], list[NDArray[np.complex128]]]:
+    """Reduce every bond of an MPO block whose left bond is open, the open bond included.
+
+    Args:
+        tensors: MPO tensors with axes ``(out, in, left, right)``; the last right bond is 1.
+
+    Returns:
+        The map from the open bond to its reduced bond, and the block with the minimal bond on every cut.
+    """
+    tensors = list(tensors)
+    for i in range(len(tensors) - 1):
+        d_out, d_in, left, right = tensors[i].shape
+        q_tensor, r_mat = right_qr(tensors[i].reshape(d_out * d_in, left, right))
+        tensors[i] = q_tensor.reshape(d_out, d_in, left, -1)
+        tensors[i + 1] = oe.contract("kr,abrs->abks", r_mat, tensors[i + 1])
+    for i in range(len(tensors) - 1, -1, -1):
+        d_out, d_in, left, right = tensors[i].shape
+        matrix = tensors[i].transpose(2, 0, 1, 3).reshape(left, d_out * d_in * right)
+        u_mat, s_list, v_mat = linalg.svd(matrix, full_matrices=False)
+        # Relative 1e-12 is a round-off floor, not a simulation tolerance.
+        keep = linalg.truncate(s_list, mode="relative", threshold=1e-12, min_keep=1)
+        tensors[i] = v_mat[:keep].reshape(keep, d_out, d_in, right).transpose(1, 2, 0, 3)
+        boundary = u_mat[:, :keep] * s_list[:keep]
+        if i > 0:
+            tensors[i - 1] = oe.contract("abml,lk->abmk", tensors[i - 1], boundary)
+    return boundary, tensors
+
+
+def _control_window_mpo(
+    controls: dict[int, int],
+    window: list[NDArray[np.complex128]],
+    *,
+    window_start: int,
+    first_site: int,
+    last_site: int,
+) -> list[NDArray[np.complex128]]:
+    """Return the identity plus the controls times a target window, minimal bond past the outer controls.
+
+    Args:
+        controls: Control sites mapped to the value each one must read.
+        window: Target tensors from ``window_start`` onwards, one per site.
+        window_start: First site the window covers.
+        first_site: First site of the gate span.
+        last_site: Last site of the gate span.
+
+    Returns:
+        Tensors ``(out, in, left, right)`` for every site from ``first_site`` to ``last_site``.
+    """
+    projectors = (PROJECTOR_ZERO, PROJECTOR_ONE)
+    window_sites = dict(zip(range(window_start, window_start + len(window)), window, strict=True))
+    channel = []
+    for site in range(first_site, last_site + 1):
+        tensor = window_sites.get(site, make_identity_site(2))
+        if site in controls:
+            tensor = oe.contract("ab,bclr->aclr", projectors[controls[site]], tensor)
+        channel.append(tensor)
+    channel_mpo = MPO()
+    channel_mpo.custom(channel, transpose=False)
+    tensors = (MPO.identity(len(channel)) + channel_mpo).tensors
+    # Only the end blocks are reduced: the controls' identity string outweighs U - I by 2**(m/2).
+    first_control, last_control = min(controls) - first_site, max(controls) - first_site
+    if last_control < len(tensors) - 1:
+        boundary, tensors[last_control + 1 :] = _reduce_end_block(tensors[last_control + 1 :])
+        tensors[last_control] = oe.contract("abml,lk->abmk", tensors[last_control], boundary)
+    if first_control > 0:
+        mirrored = [tensor.transpose(0, 1, 3, 2) for tensor in reversed(tensors[:first_control])]
+        boundary, mirrored = _reduce_end_block(mirrored)
+        tensors[:first_control] = [tensor.transpose(0, 1, 3, 2) for tensor in reversed(mirrored)]
+        tensors[first_control] = oe.contract("lk,ablr->abkr", boundary, tensors[first_control])
+    return tensors
+
+
 def _identity_multiple(matrix: NDArray[np.complex128]) -> complex | None:
     """Return ``c`` if ``matrix`` is ``c`` times the identity up to round-off relative to ``matrix``, else ``None``.
 
@@ -370,11 +449,16 @@ def _controlled_gate_mpo(
     Returns:
         Tensors ``(out, in, left, right)`` for every site from the first to the last involved site.
     """
+    first_site, last_site = min([*controls, *targets]), max([*controls, *targets])
     difference = target_matrix - np.eye(len(target_matrix), dtype=np.complex128)
     phase = _identity_multiple(difference)
     if phase is not None:
         return _controlled_product_mpo(controls, targets, [(1 + phase) * IDENTITY] + [IDENTITY] * (len(targets) - 1))
-    return _controlled_product_mpo(controls, targets, [target_matrix])
+    if len(targets) == 1:
+        return _controlled_product_mpo(controls, targets, [target_matrix])
+    # An entangling target needs the operator-Schmidt terms of U - I, found by one SVD.
+    window = extend_gate(np.reshape(difference, (2,) * (2 * len(targets))), targets)
+    return _control_window_mpo(controls, window, window_start=min(targets), first_site=first_site, last_site=last_site)
 
 
 class _ControlledGate(BaseGate):
@@ -472,8 +556,6 @@ def _translate_controlled(
         if not _is_unitary(target_matrix):
             return None
         target = convert_matrix_layout(target_matrix) if num_targets >= 2 else target_matrix
-        if num_targets >= 2 and _identity_multiple(target - np.eye(len(target))) is None:
-            return None
     if target is None:
         return None
     gate = _ControlledGate(target, [(ctrl_state >> i) & 1 for i in range(num_controls)])

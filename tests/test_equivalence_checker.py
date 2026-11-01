@@ -27,6 +27,7 @@ from qiskit.circuit.library import (
     CYGate,
     ECRGate,
     MCXGate,
+    SwapGate,
     U1Gate,
     U3Gate,
     UnitaryGate,
@@ -671,6 +672,7 @@ def test_matrix_backend_supports_multi_qubit_gates() -> None:
     ("make_gate", "qubits"),
     [
         pytest.param(lambda: MCXGate(3, ctrl_state=0b101), [0, 3, 1, 4], id="mcx-open-controls"),
+        pytest.param(lambda: SwapGate().control(2, annotated=False), [0, 3, 1, 4], id="controlled-swap"),
     ],
 )
 def test_matrix_backend_checks_gates_built_from_their_parts(make_gate: Callable[[], Gate], qubits: list[int]) -> None:

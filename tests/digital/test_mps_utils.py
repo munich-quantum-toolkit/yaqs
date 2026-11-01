@@ -16,7 +16,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import MCXGate
+from qiskit.circuit.library import MCXGate, SwapGate
 from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Statevector, random_unitary
 
@@ -416,6 +416,14 @@ def test_long_range_gate_on_qudit_spectators_matches_full_chain_mpo(
             MCXGate(8),
             lambda block, axes: np.flip(block, axis=axes[0]),
             id="qudit-between-controls",
+        ),
+        pytest.param(
+            [2] * 9 + [3] + [2],
+            list(range(8)),
+            [8, 10],
+            SwapGate().control(8, annotated=False),
+            lambda block, axes: np.swapaxes(block, *axes),
+            id="qudit-between-targets",
         ),
     ],
 )
