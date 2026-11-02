@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from functools import reduce
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,7 @@ import pytest
 
 from mqt.yaqs import MPO
 from mqt.yaqs.core.data_structures._sum_of_products import (  # ruff: ignore[import-private-name]  # module-private builder
+    ExactComplex,
     sum_of_products_tensors,
 )
 from mqt.yaqs.core.libraries.operator_matrices import (
@@ -137,3 +139,8 @@ def test_cancelling_terms_give_the_zero_mpo() -> None:
 
     assert [tensor.shape for tensor in tensors] == [(2, 2, 1, 1)] * 3
     assert not any(tensor.any() for tensor in tensors)
+
+
+def test_exact_coefficient_prints_both_rational_parts() -> None:
+    """The exact coefficient prints as rationals, which is what a failing assertion shows."""
+    assert repr(ExactComplex(Fraction(1, 3), Fraction(-2, 5))) == "ExactComplex(1/3, -2/5)"

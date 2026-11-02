@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff:file-ignore[import-private-name] -- white-box tests import the private gate builders of dag_utils
+
 """Tests for the DAG utility functions.
 
 This module contains unit tests for the DAG utility functions used in the conversion and processing
@@ -84,6 +86,11 @@ from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
     SUPPORTED_QISKIT_GATE_NAMES,
+    _ControlledGate,
+    _PauliSumGate,
+    _target_factors,
+    _translate_pauli_evolution,
+    _translate_pauli_string,
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,
@@ -1626,3 +1633,63 @@ def test_commuting_rotations_that_factorize_have_bond_one_between_them() -> None
     expected = _dense_pauli_rotation(6, list(range(6)), labels, [0.4, 0.7], 1.0)
     assert_allclose(MPO.from_gate(gate, 6).to_matrix(), expected, atol=1e-12)
     assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2, 1, 1, 1, 2]
+
+
+def test_controlled_gate_binds_sites_given_as_lists() -> None:
+    """``set_sites`` accepts a list of indices as well as single indices."""
+    gate = _ControlledGate(np.eye(2, dtype=np.complex128), [1, 1])
+
+    gate.set_sites([0, 1], 2)
+
+    assert gate.sites == [0, 1, 2]
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_controlled_gate_rejects_a_site_count_below_its_interaction() -> None:
+    """A gate bound to fewer or more sites than it acts on must raise."""
+    gate = _ControlledGate(np.eye(2, dtype=np.complex128), [1])
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
+
+def test_pauli_sum_gate_binds_sites_given_as_lists() -> None:
+    """``set_sites`` of the Pauli-sum gate accepts a list of indices as well as single indices."""
+    gate = _PauliSumGate([(1.0 + 0j, {0: "X", 2: "Z"})], 3)
+
+    gate.set_sites([0, 1, 2])
+
+    assert gate.sites == [0, 1, 2]
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_pauli_sum_gate_rejects_a_site_count_below_its_interaction() -> None:
+    """A Pauli-sum gate bound to fewer or more sites than it acts on must raise."""
+    gate = _PauliSumGate([(1.0 + 0j, {0: "X"})], 2)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
+
+def test_pauli_string_that_does_not_span_its_sites_falls_back() -> None:
+    """A Pauli label that does not cover every site is not built from the label."""
+    assert _translate_pauli_string(PauliGate("XYZ"), name="pauli", sites=[0, 1]) is None
+
+
+def test_pauli_evolution_whose_time_is_not_a_number_falls_back() -> None:
+    """An evolution time that does not convert to a float is not built from the terms."""
+    gate = PauliEvolutionGate(SparsePauliOp(["XZZX"]), time=Parameter("t"))
+
+    assert _translate_pauli_evolution(gate, name="pauli-evolution", sites=[0, 1, 2, 3]) is None
+
+
+def test_target_without_a_matrix_is_not_a_product_of_factors() -> None:
+    """A target the gate gives no matrix for cannot be split into one-qubit factors."""
+    assert _target_factors(Gate("opaque", 1, []), 2, name="opaque") is None
+
+
+def test_non_unitary_target_is_not_a_product_of_factors() -> None:
+    """A target that is not unitary cannot be split into one-qubit factors."""
+    base = UnitaryGate(np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.complex128), check_input=False)
+
+    assert _target_factors(base, 2, name="nonunitary") is None

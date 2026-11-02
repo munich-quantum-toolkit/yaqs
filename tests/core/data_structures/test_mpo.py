@@ -1757,6 +1757,27 @@ def test_from_pauli_sum_raises_on_duplicate_site_in_spec() -> None:
         mpo.from_pauli_sum(terms=[(1.0, "X0 Z0")], length=2, n_sweeps=0)
 
 
+def test_from_pauli_sum_compresses_only_when_an_approximation_is_asked_for() -> None:
+    """The default build is exact, and only a bond cap or a raised tolerance compresses it."""
+    terms: list[tuple[complex | float, str]] = [
+        (1.0, f"Z{left} Z{right}") for left in range(6) for right in range(left + 1, 6)
+    ]
+
+    exact = MPO()
+    exact.from_pauli_sum(terms=terms, length=6)
+    capped = MPO()
+    capped.from_pauli_sum(terms=terms, length=6, max_bond_dim=2)
+    loose = MPO()
+    loose.from_pauli_sum(terms=terms, length=6, tol=0.5)
+
+    exact_bonds = [tensor.shape[3] for tensor in exact.tensors]
+    assert max(exact_bonds) == 3
+    assert max(tensor.shape[3] for tensor in capped.tensors) == 2
+    assert [tensor.shape[3] for tensor in loose.tensors] != exact_bonds
+    assert capped.check_if_valid_mpo()
+    assert loose.check_if_valid_mpo()
+
+
 def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
     """Pauli parsing integration: invalid tokens in the spec must raise."""
     mpo = MPO()
