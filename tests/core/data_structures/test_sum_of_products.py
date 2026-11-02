@@ -30,12 +30,16 @@ from mqt.yaqs.core.libraries.operator_matrices import (
 from tests.conftest import YAQS_TEST_SEED
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from numpy.typing import NDArray
 
 _PAULIS = (IDENTITY, PAULI_X, PAULI_Y, PAULI_Z)
 
 
-def _dense(terms: list[tuple[complex, dict[int, NDArray[np.complex128]]]], num_sites: int) -> NDArray[np.complex128]:
+def _dense(
+    terms: Sequence[tuple[complex, dict[int, NDArray[np.complex128]]]], num_sites: int
+) -> NDArray[np.complex128]:
     """Return the sum of the terms, with site 0 least significant as in ``MPO.to_matrix``."""
     total = np.zeros((2**num_sites, 2**num_sites), dtype=np.complex128)
     for coeff, operators in terms:
