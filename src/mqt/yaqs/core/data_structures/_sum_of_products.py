@@ -63,10 +63,6 @@ class ExactComplex:
         """Return the exact product."""
         return ExactComplex(self.re * other.re - self.im * other.im, self.re * other.im + self.im * other.re)
 
-    def __neg__(self) -> ExactComplex:
-        """Return the exact negation."""
-        return ExactComplex(-self.re, -self.im)
-
     def inverse(self) -> ExactComplex:
         """Return the exact reciprocal of a nonzero number.
 

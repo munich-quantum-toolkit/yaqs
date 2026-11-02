@@ -543,10 +543,9 @@ def _pauli_product(left: str, right: str) -> tuple[complex, str]:
     Returns:
         The phase and the resulting Pauli label.
     """
+    # The caller drops the identity from a term's factors, so only ``left`` can be the identity.
     if left == "I":
         return 1.0, right
-    if right == "I":
-        return 1.0, left
     if left == right:
         return 1.0, "I"
     return _PAULI_PRODUCT[left, right]
@@ -728,8 +727,7 @@ def _as_controlled(op: Operation) -> tuple[Gate | None, int, int, int] | None:
             num_controls = modifier.num_ctrl_qubits
             ctrl_state = modifier.ctrl_state
             num_targets = op.base_op.num_qubits
-            if ctrl_state is None:  # every control reads one
-                return op.base_op, num_controls, (1 << num_controls) - 1, num_targets
+            # ``ControlModifier`` normalises its control state to an integer on construction.
             if isinstance(ctrl_state, int):
                 return op.base_op, num_controls, ctrl_state, num_targets
     return None
@@ -749,8 +747,7 @@ def _target_factors(base: Gate, num_targets: int, *, name: str) -> list[NDArray[
     label = base.params[0] if isinstance(base, PauliGate) and base.params else None
     if isinstance(label, str) and len(label) == num_targets:
         # Label character ``label[-1 - j]`` acts on base qubit ``j``, so the factors run reversed.
-        if set(label) - _PAULI_LABELS:
-            return None
+        # Qiskit validates the label of a ``PauliGate``, so every character is a Pauli.
         return [_PAULI_MATRIX[single] for single in reversed(label)]
     # Any other base acts on one qubit and repeats on every target, as in ``MCMTGate``.
     if base.num_qubits != 1:
