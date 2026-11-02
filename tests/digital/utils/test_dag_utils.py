@@ -1587,16 +1587,19 @@ def test_gate_from_three_qubits_outside_the_builders_keeps_its_matrix(gate: Oper
 
 @pytest.mark.filterwarnings("ignore::scipy.sparse.SparseEfficiencyWarning")
 def test_non_commuting_pauli_rotation_from_three_qubits_keeps_its_matrix() -> None:
-    """A Pauli rotation whose terms do not commute keeps the dense fallback up to eight qubits."""
-    labels = ["XXII", "ZIIZ"]
+    """A Pauli rotation whose terms do not commute keeps the dense fallback up to eight qubits.
+
+    The reference is the gate's own dense matrix rather than the exact exponential of the generator,
+    because for non-commuting terms the two differ by the Trotter error of the gate's definition on
+    the Qiskit versions that give no matrix for ``PauliEvolutionGate``.
+    """
     qc = QuantumCircuit(4)
-    qc.append(PauliEvolutionGate(SparsePauliOp(labels), time=0.3), range(4))
+    qc.append(PauliEvolutionGate(SparsePauliOp(["XXII", "ZIIZ"]), time=0.3), range(4))
 
     (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
 
     assert hasattr(gate, "matrix")
-    expected = _dense_pauli_rotation(4, list(range(4)), labels, [1.0, 1.0], 0.3)
-    assert_allclose(MPO.from_gate(gate, 4).to_matrix(), expected, atol=1e-12)
+    assert_allclose(MPO.from_gate(gate, 4).to_matrix(), Operator(qc).data, atol=1e-12)
 
 
 def test_pauli_rotation_keeps_a_small_angle_exactly() -> None:
