@@ -144,3 +144,20 @@ def test_cancelling_terms_give_the_zero_mpo() -> None:
 def test_exact_coefficient_prints_both_rational_parts() -> None:
     """The exact coefficient prints as rationals, which is what a failing assertion shows."""
     assert repr(ExactComplex(Fraction(1, 3), Fraction(-2, 5))) == "ExactComplex(1/3, -2/5)"
+
+
+def test_nearly_dependent_operators_keep_the_operator() -> None:
+    """Operators dependent only over the rationals are kept apart, since rebuilding them loses the operator."""
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    base = rng.normal(size=(2, 2)) + 1j * rng.normal(size=(2, 2))
+    drift = rng.normal(size=(2, 2)) + 1j * rng.normal(size=(2, 2))
+    operators = [base + k * 1e-9 * drift for k in range(4)]
+    operators.append(rng.normal(size=(2, 2)) + 1j * rng.normal(size=(2, 2)))
+    flat = np.array([operator.ravel() for operator in operators])
+    # The fifth operator is in the exact span of the first four and not in their numerical span.
+    assert np.linalg.matrix_rank(flat[:4], tol=1e-10) < 4
+    terms = [(complex(k + 1), {0: operator, 1: PAULI_Z}) for k, operator in enumerate(operators)]
+
+    tensors = sum_of_products_tensors(terms, 2)
+
+    np.testing.assert_allclose(_to_matrix(tensors), _dense(terms, 2), atol=1e-12)

@@ -122,13 +122,38 @@ def _reduced_row_echelon(matrix: list[list[ExactComplex]]) -> tuple[list[list[Ex
     return rows[:rank], pivots
 
 
+def _reconstructs(
+    operator: NDArray[np.complex128],
+    basis: list[NDArray[np.complex128]],
+    coordinates: dict[int, ExactComplex],
+    tol: float,
+) -> bool:
+    """Return whether the exact coordinates rebuild ``operator`` in double precision too.
+
+    Args:
+        operator: The operator the coordinates are meant to rebuild.
+        basis: The independent operators found so far.
+        coordinates: The exact coordinates on them.
+        tol: Relative size the rebuilt operator may differ by.
+
+    Returns:
+        True when the coordinates rebuild the operator to ``tol`` of its own size.
+    """
+    rebuilt = np.zeros_like(operator, dtype=np.complex128)
+    for position, value in coordinates.items():
+        rebuilt += complex(value) * basis[position]
+    scale = float(np.abs(operator).max())
+    return bool(np.abs(rebuilt - operator).max() <= tol * max(scale, 1.0))
+
+
 def _site_basis(
-    operators: list[NDArray[np.complex128]],
+    operators: list[NDArray[np.complex128]], tol: float = 1e-10
 ) -> tuple[list[NDArray[np.complex128]], list[dict[int, ExactComplex]]]:
     """Return independent operators spanning ``operators``, and each operator's exact coefficients on them.
 
     Args:
         operators: Distinct operators of one site.
+        tol: Relative size a dependence may miss the operator by before it is refused.
 
     Returns:
         The independent operators, a subset of the input, and the coefficients of every input operator.
@@ -143,8 +168,15 @@ def _site_basis(
             system = [[*(basis_vector[i] for basis_vector in vectors), vector[i]] for i in range(len(vector))]
             reduced, pivots = _reduced_row_echelon(system)
             if len(vectors) not in pivots:
-                coordinates.append({pivot: row[-1] for pivot, row in zip(pivots, reduced, strict=True) if row[-1]})
-                continue
+                coords = {pivot: row[-1] for pivot, row in zip(pivots, reduced, strict=True) if row[-1]}
+                # Nearly dependent floats are exactly independent, with coordinates past 1e16 on a
+                # basis that is rank deficient in double precision, so both must hold numerically.
+                stacked = np.array([held.ravel() for held in basis])
+                if np.linalg.matrix_rank(stacked, tol=tol) == len(basis) and _reconstructs(
+                    operator, basis, coords, tol
+                ):
+                    coordinates.append(coords)
+                    continue
         coordinates.append({len(basis): _ONE})
         basis.append(operator)
         vectors.append(vector)
