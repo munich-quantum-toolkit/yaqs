@@ -210,6 +210,7 @@ addopts = [
 ]
 filterwarnings = [
   "error",
+  "ignore:.*Skipping device Apple Paravirtual device that does not support Metal 2.0.*:UserWarning:",
 ]
 log_level = "INFO"
 markers = [
