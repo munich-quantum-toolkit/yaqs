@@ -1808,6 +1808,7 @@ class MPO:
             max_bond_dim=sim_params.max_bond_dim,
             trunc_mode=sim_params.trunc_mode,
             _restore_center=state.length - 1,
+            _min_keep=2 if sim_params.max_bond_dim is None else min(2, sim_params.max_bond_dim),
         )
 
     def _multiply_mpo(
