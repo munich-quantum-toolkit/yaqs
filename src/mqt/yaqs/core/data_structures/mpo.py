@@ -22,6 +22,7 @@ from numpy.typing import NDArray
 from .. import linalg
 from .._validation import validate_real
 from ..libraries.gate_library import Destroy
+from ._sum_of_products import sum_of_products_tensors
 from .mpo_utils import (
     contract_mpo_site_with_mpo_site,
     contract_mpo_site_with_mps_site,
@@ -37,6 +38,8 @@ if TYPE_CHECKING:
     from .simulation_parameters import DigitalSimParams
 
 ComplexTensor = NDArray[np.complex128]
+# Default compression threshold of ``from_pauli_sum``, above which it approximates.
+_EXACT_PAULI_SUM_TOL = 1e-12
 
 
 def _validate_mpo_tensors(
@@ -520,31 +523,36 @@ class MPO:
         terms: list[tuple[complex | float, str]],
         length: int,
         physical_dimension: int = 2,
-        tol: float = 1e-12,
+        tol: float = _EXACT_PAULI_SUM_TOL,
         max_bond_dim: int | None = None,
         n_sweeps: int = 2,
     ) -> None:
         """Build this MPO in place from a sum of Pauli-string terms.
 
-        A finite state machine combines the terms before optional SVD compression.
+        The terms are combined exactly at the minimal bond, and SVD compression runs only if
+        ``max_bond_dim`` is set or ``tol`` exceeds its default.
 
         Args:
             terms: ``(coefficient, spec)`` pairs; examples of ``spec`` are
                 ``"Z0 Z1"``, ``"X7"``, and ``""`` for the identity.
             length: Number of sites.
             physical_dimension: Local dimension; only two is supported.
-            tol: SVD threshold for final compression.
+            tol: SVD threshold of the optional compression.
             max_bond_dim: Optional hard cap on the kept bond dimension.
-            n_sweeps: Non-negative number of compression sweeps.
+            n_sweeps: Non-negative number of sweeps of the optional compression.
 
         Raises:
-            ValueError: If length, local dimension, site indices, or term specifications are invalid.
+            ValueError: If length, local dimension, sweep count, site indices, or term specifications are
+                invalid.
         """
         if physical_dimension != 2:
             msg = "Only physical_dimension=2 is supported by this Pauli MPO builder."
             raise ValueError(msg)
         if length <= 0:
             msg = "length must be positive."
+            raise ValueError(msg)
+        if n_sweeps < 0:
+            msg = "n_sweeps must be >= 0."
             raise ValueError(msg)
 
         self.length = length
@@ -554,12 +562,9 @@ class MPO:
             self.tensors = [np.zeros((2, 2, 1, 1), dtype=complex) for _ in range(length)]
             return
 
-        # 1. Parse terms into dense lists of operator names.
-        #    Structure: terms list of (coeff, [op_at_site_0, op_at_site_1, ...])
-        parsed_terms: list[tuple[complex | float, list[str]]] = []
+        operators: list[tuple[complex | float, dict[int, NDArray[np.complex128]]]] = []
         for coeff, spec in terms:
             ops_map = self._parse_pauli_string(spec)
-            # Validate sites
             for site, lab in ops_map.items():
                 if not (0 <= site < length):
                     msg = f"Site index {site} outside [0, {length - 1}]."
@@ -567,90 +572,12 @@ class MPO:
                 if lab not in self._VALID:
                     msg = f"Invalid local op {lab!r}; expected one of {sorted(self._VALID)}."
                     raise ValueError(msg)
+            operators.append((coeff, {site: self._PAULI_2[lab] for site, lab in ops_map.items()}))
 
-            # Fill missing sites with Identity "I"
-            op_list = [ops_map.get(i, "I") for i in range(length)]
-            parsed_terms.append((coeff, op_list))
-
-        # 2. Assign State IDs (Right-to-Left)
-        #    We identify unique "suffix states" needed at each bond.
-        #    A state at bond i is uniquely defined by the pair (Operator at site i, State at bond i+1).
-
-        # `term_trajectories[term_idx][i]` stores the State ID at bond `i` for `term_idx`.
-        # Bond indices range from 0 (left of site 0) to L (right of site L-1).
-        term_trajectories = [[0] * (length + 1) for _ in range(len(parsed_terms))]
-
-        # Initialize right boundary (Bond L): All terms end at the "sink" state (ID 0).
-        for t_idx in range(len(parsed_terms)):
-            term_trajectories[t_idx][length] = 0
-
-        # bond_state_maps[i] stores the mapping: (Op_str, Next_State_ID) -> Current_State_ID
-        bond_state_maps: list[dict[tuple[str, int], int]] = [{} for _ in range(length + 1)]
-
-        # Sweep Right-to-Left (sites L-1 down to 1) to build the FSM transitions.
-        # We stop at bond 1. Bond 0 is always the single "Start" state.
-        for i in range(length - 1, 0, -1):
-            next_bond = i + 1
-            current_bond = i
-
-            unique_states_map = bond_state_maps[current_bond]
-            next_id = 0
-
-            for t_idx, (_, ops) in enumerate(parsed_terms):
-                op = ops[i]
-                next_state = term_trajectories[t_idx][next_bond]
-                signature = (op, next_state)
-
-                if signature not in unique_states_map:
-                    unique_states_map[signature] = next_id
-                    next_id += 1
-
-                term_trajectories[t_idx][current_bond] = unique_states_map[signature]
-
-        # 3. Build Tensors (Left-to-Right)
-        self.tensors = []
-        paulis = self._PAULI_2
-
-        for i in range(length):
-            # Determine bond dimensions based on number of unique states at boundaries
-            if i == 0:
-                d_left = 1
-                d_right = 1 if length == 1 else len(bond_state_maps[1])
-                # Handle edge case where d_right is 0 (should not happen if terms exist)
-                if length > 1 and d_right == 0:
-                    d_right = 1
-            else:
-                d_left = len(bond_state_maps[i])
-                d_right = 1 if i == length - 1 else len(bond_state_maps[i + 1])
-
-            # Allocate tensor: (phys_out, phys_in, left, right)
-            tensor = np.zeros((2, 2, d_left, d_right), dtype=complex)
-
-            if i == 0:
-                # First site: Accumulate coefficients and split into initial branches.
-                for t_idx, (coeff, ops) in enumerate(parsed_terms):
-                    op_name = ops[i]
-                    op_mat = paulis[op_name]
-                    target_state = term_trajectories[t_idx][1]
-
-                    # Accumulate contribution. Multiple terms may map to the same target state.
-                    tensor[:, :, 0, target_state] += coeff * op_mat
-            else:
-                # Internal sites: deterministic transitions.
-                # Each row (current_id) in the tensor corresponds to a unique state from Step 2.
-                # This state maps to exactly one (op, next_id) pair.
-                map_i = bond_state_maps[i]
-
-                for (op_name, next_id), current_id in map_i.items():
-                    op_mat = paulis[op_name]
-                    tensor[:, :, current_id, next_id] = op_mat
-
-            self.tensors.append(tensor)
-
-        # 4. Final Compression
-        #    Compress shared prefixes left after suffix merging, within the
-        #    configured tolerance, rank cap, and sweep count.
-        self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
+        # The exact MPO already has the minimal bond, so compression only runs to approximate.
+        self.tensors = sum_of_products_tensors(operators, length)
+        if max_bond_dim is not None or tol > _EXACT_PAULI_SUM_TOL:
+            self.compress(tol=tol, max_bond_dim=max_bond_dim, n_sweeps=n_sweeps, directions="lr_rl")
         assert self.check_if_valid_mpo(), "MPO initialized wrong"
 
     @classmethod
