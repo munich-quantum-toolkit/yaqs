@@ -1757,6 +1757,27 @@ def test_from_pauli_sum_raises_on_duplicate_site_in_spec() -> None:
         mpo.from_pauli_sum(terms=[(1.0, "X0 Z0")], length=2, n_sweeps=0)
 
 
+def test_from_pauli_sum_compresses_only_when_an_approximation_is_asked_for() -> None:
+    """The default build is exact, and only a bond cap or a raised tolerance compresses it."""
+    terms: list[tuple[complex | float, str]] = [
+        (1.0, f"Z{left} Z{right}") for left in range(6) for right in range(left + 1, 6)
+    ]
+
+    exact = MPO()
+    exact.from_pauli_sum(terms=terms, length=6)
+    capped = MPO()
+    capped.from_pauli_sum(terms=terms, length=6, max_bond_dim=2)
+    loose = MPO()
+    loose.from_pauli_sum(terms=terms, length=6, tol=0.5)
+
+    exact_bonds = [tensor.shape[3] for tensor in exact.tensors]
+    assert max(exact_bonds) == 3
+    assert max(tensor.shape[3] for tensor in capped.tensors) == 2
+    assert [tensor.shape[3] for tensor in loose.tensors] != exact_bonds
+    assert capped.check_if_valid_mpo()
+    assert loose.check_if_valid_mpo()
+
+
 def test_from_pauli_sum_raises_on_invalid_tokens_in_spec() -> None:
     """Pauli parsing integration: invalid tokens in the spec must raise."""
     mpo = MPO()
@@ -2024,3 +2045,30 @@ def test_from_matrix_round_trip_preserves_site_zero_lsb() -> None:
 
     np.testing.assert_allclose(mpo.to_matrix(), expected, atol=1e-12)
     np.testing.assert_allclose(mpo.to_sparse_matrix().toarray(), expected, atol=1e-12)
+
+
+def test_from_pauli_sum_keeps_the_minimal_bond_on_a_long_chain() -> None:
+    """``cos t I - i sin t XZ...ZX`` keeps bond two on every cut of a long chain."""
+    length = 64
+    string = " ".join(["X0", *(f"Z{site}" for site in range(1, length - 1)), f"X{length - 1}"])
+    mpo = MPO()
+    mpo.from_pauli_sum(terms=[(np.cos(0.3), ""), (-1j * np.sin(0.3), string)], length=length)
+
+    assert [tensor.shape[3] for tensor in mpo.tensors[:-1]] == [2] * (length - 1)
+
+
+def test_jordan_wigner_fermi_hubbard_mpo_has_the_minimal_bond() -> None:
+    """The Jordan-Wigner Fermi-Hubbard MPO carries the operator-Schmidt rank, independent of the length."""
+    bonds = [
+        max(tensor.shape[3] for tensor in MPO.fermi_hubbard_1d(n, t=1.0, u=4.0, jordan_wigner=True).tensors[:-1])
+        for n in (8, 16)
+    ]
+
+    assert bonds == [7, 7]
+
+
+def test_from_pauli_sum_raises_on_negative_n_sweeps() -> None:
+    """A negative sweep count is rejected even when no compression runs."""
+    mpo = MPO()
+    with pytest.raises(ValueError, match=r"n_sweeps must be >= 0\."):
+        mpo.from_pauli_sum(terms=[(1.0, "Z0")], length=2, n_sweeps=-1)

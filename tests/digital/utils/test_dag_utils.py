@@ -5,6 +5,8 @@
 #
 # Licensed under the MIT License
 
+# ruff:file-ignore[import-private-name] -- white-box tests import the private gate builders of dag_utils
+
 """Tests for the DAG utility functions.
 
 This module contains unit tests for the DAG utility functions used in the conversion and processing
@@ -17,6 +19,7 @@ ranges for gate application.
 from __future__ import annotations
 
 import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # controlled test round-trips; no untrusted input
 from itertools import permutations
 from types import SimpleNamespace
 from typing import Literal
@@ -26,43 +29,75 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from qiskit import QuantumCircuit
-from qiskit.circuit import Barrier, Gate, Operation, Parameter, QuantumRegister, Qubit
+from qiskit.circuit import (
+    AnnotatedOperation,
+    Barrier,
+    ControlledGate,
+    ControlModifier,
+    Gate,
+    InverseModifier,
+    Operation,
+    Parameter,
+    QuantumRegister,
+    Qubit,
+)
 from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.library import (
+    CCXGate,
     CPhaseGate,
     CRZGate,
+    CSwapGate,
+    CUGate,
     CXGate,
+    GlobalPhaseGate,
     HGate,
     IGate,
+    MCMTGate,
+    MCXGate,
+    PauliEvolutionGate,
+    PauliGate,
     RXXGate,
+    RYGate,
     RYYGate,
+    RZGate,
     RZXGate,
     RZZGate,
     SdgGate,
     SGate,
+    SwapGate,
     SXdgGate,
     TdgGate,
     TGate,
     U1Gate,
     U3Gate,
     UnitaryGate,
+    XGate,
+    ZGate,
 )
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGOpNode
 from qiskit.qasm2 import loads
-from qiskit.quantum_info import Operator, Statevector
+from qiskit.quantum_info import Operator, PauliList, SparsePauliOp, Statevector
+from scipy.linalg import expm
 
 from mqt.yaqs import DigitalSimParams, EquivalenceChecker, State
+from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.libraries.gate_library import GateLibrary, Rx
 from mqt.yaqs.digital.digital_tjm import apply_two_qubit_gate
 from mqt.yaqs.digital.utils.dag_utils import (
     SUPPORTED_QISKIT_GATE_NAMES,
+    _ControlledGate,
+    _PauliSumGate,
+    _target_factors,
+    _translate_pauli_evolution,
+    _translate_pauli_string,
     check_longest_gate,
     convert_dag_to_tensor_algorithm,
     get_temporal_zone,
     is_digital_noise_opportunity,
     select_starting_point,
 )
+from tests.conftest import YAQS_TEST_SEED
 from tests.core.methods.tdvp.conftest import _fidelity
 from tests.digital.conftest import _run_digital_observables_noiseless
 
@@ -243,7 +278,7 @@ def test_unbound_parameterized_gate_raises() -> None:
 def test_wide_matrix_fallback_gate_raises() -> None:
     """Matrix-fallback gates wider than the documented maximum should be rejected."""
     qc = QuantumCircuit(9)
-    qc.mcx(list(range(8)), 8)
+    qc.append(Gate("wide", 9, []), range(9))
     dag = circuit_to_dag(qc)
 
     with pytest.raises(ValueError, match="matrix fallback supports at most"):
@@ -442,6 +477,286 @@ def test_cswap_translates_without_generator() -> None:
     assert gate.sites == [0, 1, 2]
     assert not hasattr(gate, "generator")
     assert len(gate.mpo_tensors) == 3
+
+
+def _seeded_diagonal_unitary(dimension: int) -> np.ndarray:
+    """Return a diagonal unitary that is not a tensor product of one-qubit factors."""
+    rng = np.random.default_rng(20261031)
+    return np.diag(np.exp(2j * np.pi * rng.random(dimension)))
+
+
+def _controlled(base: Gate, num_ctrl_qubits: int, ctrl_state: int | None = None) -> ControlledGate:
+    """Controlled gate built directly, without the decomposition that ``UnitaryGate.control`` synthesizes.
+
+    Returns:
+        The controlled gate with ``base`` as its target operator.
+    """
+    return ControlledGate(
+        f"c{num_ctrl_qubits}{base.name}",
+        num_ctrl_qubits + base.num_qubits,
+        base.params,
+        num_ctrl_qubits=num_ctrl_qubits,
+        ctrl_state=ctrl_state,
+        base_gate=base,
+    )
+
+
+def _dense_controlled_gate(
+    num_qubits: int, controls: dict[int, int], targets: list[int], target_matrix: np.ndarray
+) -> np.ndarray:
+    """Dense ``|b><b| (x) U + (I - |b><b|) (x) I`` with site 0 least significant and ``U`` in Qiskit order.
+
+    Returns:
+        The ``2**num_qubits`` square matrix of the controlled gate.
+    """
+    out = np.eye(2**num_qubits, dtype=np.complex128)
+    for col in range(2**num_qubits):
+        if all((col >> site) & 1 == value for site, value in controls.items()):
+            target_in = sum(((col >> site) & 1) << j for j, site in enumerate(targets))
+            rest = col & ~sum(1 << site for site in targets)
+            out[col, col] = 0.0
+            for target_out in range(2 ** len(targets)):
+                row = rest | sum(((target_out >> j) & 1) << site for j, site in enumerate(targets))
+                out[row, col] = target_matrix[target_out, target_in]
+    return out
+
+
+def test_wide_controlled_gate_builds_its_mpo_without_a_matrix() -> None:
+    """A controlled gate on more than eight qubits is built from its controls and target operator."""
+    qc = QuantumCircuit(9)
+    qc.mcx(list(range(8)), 8)
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert gate.interaction == 9
+    assert gate.sites == list(range(9))
+    assert not hasattr(gate, "matrix")
+    assert not hasattr(gate, "generator")
+    assert len(gate.mpo_tensors) == 9
+
+
+def test_annotated_wide_controlled_gate_builds_its_mpo() -> None:
+    """A control given as an annotation takes the same path as a plain controlled gate."""
+    qc = QuantumCircuit(12)
+    qc.append(ZGate().control(11, annotated=True), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(gate, "matrix")
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2] * 11
+
+
+def test_annotated_wide_controlled_gate_matches_the_dense_gate() -> None:
+    """The control state of an annotated controlled gate is read from its modifier."""
+    ctrl_state = 5
+    controls = {site: (ctrl_state >> site) & 1 for site in range(9)}
+    qc = QuantumCircuit(10)
+    qc.append(ZGate().control(9, annotated=True, ctrl_state=ctrl_state), range(10))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_controlled_gate(10, controls, [9], np.asarray(ZGate().to_matrix(), dtype=np.complex128))
+    assert_allclose(MPO.from_gate(gate, 10).to_matrix(), expected, atol=1e-12)
+
+
+def test_annotated_operation_that_is_not_only_controls_falls_back() -> None:
+    """An annotation carrying more than control modifiers keeps the fallback limit."""
+    qc = QuantumCircuit(10)
+    qc.append(AnnotatedOperation(ZGate(), [ControlModifier(9), InverseModifier()]), range(10))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+
+@pytest.mark.parametrize(
+    ("gate", "qubits", "bonds"),
+    [
+        # The identity string and one controlled string differ on every cut.
+        pytest.param(
+            MCXGate(9, ctrl_state=0b101101011),
+            [0, 1, 2, 4, 6, 7, 9, 10, 11, 5],
+            [2] * 11,
+            id="mcx-controls-both-sides",
+        ),
+        # A phase on the target acts on the controls alone, so the bond is 1 after the last control.
+        pytest.param(
+            _controlled(UnitaryGate(np.exp(0.3j) * np.eye(2)), 9),
+            [*range(9), 10],
+            [2] * 8 + [1, 1],
+            id="phase-target",
+        ),
+        # The controls lie left of SWAP, so the cut between its targets carries the rank 4 of SWAP - I.
+        pytest.param(SwapGate().control(8, annotated=False), list(range(10)), [2] * 8 + [4], id="controlled-swap"),
+        # The same with the controls right of SWAP: the reduction acts on the cut before the first control.
+        pytest.param(
+            SwapGate().control(8, annotated=False),
+            [*range(2, 10), 0, 1],
+            [4] + [2] * 8,
+            id="controlled-swap-targets-first",
+        ),
+        # A phase on two targets also acts on the controls alone, on either side of them.
+        pytest.param(_controlled(UnitaryGate(-np.eye(4)), 8), list(range(10)), [2] * 7 + [1, 1], id="two-target-phase"),
+        pytest.param(
+            _controlled(UnitaryGate(-np.eye(4)), 8),
+            [*range(2, 10), 0, 1],
+            [1, 1] + [2] * 7,
+            id="two-target-phase-targets-first",
+        ),
+        # U - I has rank 4 across its targets: 4 past the outer controls, 1 + 4 between them.
+        pytest.param(
+            _controlled(UnitaryGate(_haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED))), 8),
+            [*range(1, 9), 0, 9],
+            [4] + [5] * 7 + [4],
+            id="targets-outside-the-controls",
+        ),
+    ],
+)
+def test_wide_controlled_gate_mpo_has_the_minimal_bond(gate: Gate, qubits: list[int], bonds: list[int]) -> None:
+    """Every cut of a wide controlled gate carries the operator-Schmidt rank of the gate on that cut."""
+    qc = QuantumCircuit(max(qubits) + 1)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "controls", "targets", "target_matrix"),
+    [
+        pytest.param(
+            9,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 0, 8: 1},
+            [4],
+            _haar_unitary(2, np.random.default_rng(YAQS_TEST_SEED)),
+            id="one-target",
+        ),
+        pytest.param(
+            10,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 1},
+            [9, 4],
+            _haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED)),
+            id="two-targets-descending",
+        ),
+        pytest.param(
+            10,
+            {1: 1, 2: 0, 3: 1, 4: 1, 5: 0, 6: 0, 7: 1, 8: 1},
+            [9, 0],
+            _haar_unitary(4, np.random.default_rng(YAQS_TEST_SEED)),
+            id="targets-at-both-ends",
+        ),
+        pytest.param(
+            10,
+            {0: 1, 1: 0, 2: 1, 3: 0, 4: 1, 6: 1, 8: 0},
+            [9, 5, 7],
+            _haar_unitary(8, np.random.default_rng(YAQS_TEST_SEED)),
+            id="three-targets-cycled",
+        ),
+        pytest.param(
+            10,
+            {0: 1, 1: 0, 2: 1, 3: 1, 5: 0, 6: 1, 7: 0, 8: 1, 9: 1},
+            [4],
+            np.exp(0.3j) * np.eye(2),
+            id="phase-target",
+        ),
+        pytest.param(9, {0: 1, 1: 0, 2: 1, 3: 1, 4: 0, 5: 1, 6: 0, 7: 1}, [8], np.eye(2), id="identity-target"),
+    ],
+)
+def test_wide_controlled_gate_matches_the_dense_gate(
+    num_qubits: int, controls: dict[int, int], targets: list[int], target_matrix: np.ndarray
+) -> None:
+    """A wide controlled gate equals its definition for any control pattern and target order."""
+    ctrl_state = sum(value << i for i, value in enumerate(controls.values()))
+    qc = QuantumCircuit(num_qubits)
+    qc.append(_controlled(UnitaryGate(target_matrix), len(controls), ctrl_state), [*controls, *targets])
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_controlled_gate(num_qubits, controls, targets, target_matrix)
+    assert_allclose(MPO.from_gate(gate, num_qubits).to_matrix(), expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("gate", "targets", "target_in", "target_out", "expected"),
+    [
+        pytest.param(_controlled(SwapGate(), 100), [100, 101], [0, 1], [1, 0], 1.0, id="swap-after-100-controls"),
+        pytest.param(
+            _controlled(UnitaryGate(np.diag(np.exp(-1e-6j * np.array([1, -1, -1, 1])))), 40),
+            [0, 1],
+            [0, 0],
+            [0, 0],
+            np.exp(-1e-6j),
+            id="near-identity-before-40-controls",
+        ),
+    ],
+)
+def test_wide_controlled_gate_keeps_its_action_under_many_controls(
+    gate: ControlledGate, targets: list[int], target_in: list[int], target_out: list[int], expected: complex
+) -> None:
+    """The bond reduction keeps the controlled part, which the identity outweighs by 2**(m/2) in norm."""
+    num_qubits = gate.num_qubits
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, [*(site for site in range(num_qubits) if site not in targets), *targets])
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    bits_in, bits_out = [1] * num_qubits, [1] * num_qubits
+    for site, bit_in, bit_out in zip(targets, target_in, target_out, strict=True):
+        bits_in[site], bits_out[site] = bit_in, bit_out
+    amplitude = np.linalg.multi_dot([
+        tensor[bit_out, bit_in]
+        for tensor, bit_in, bit_out in zip(yaqs_gate.mpo_tensors, bits_in, bits_out, strict=True)
+    ])
+    assert amplitude[0, 0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_phase_on_several_targets_needs_no_svd() -> None:
+    """A phase on several targets is built from its strings, so the SVD fallback never runs."""
+    qc = QuantumCircuit(6)
+    qc.append(_controlled(UnitaryGate(-np.eye(4)), 4), range(6))
+
+    with patch("mqt.yaqs.digital.utils.dag_utils._control_window_mpo", side_effect=AssertionError("SVD fallback")):
+        (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2, 2, 2, 1, 1]
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        pytest.param(
+            ControlledGate("c8x", 11, [], num_ctrl_qubits=8, base_gate=XGate()),
+            id="target-with-ancillas",
+        ),
+        pytest.param(
+            _controlled(UnitaryGate(_seeded_diagonal_unitary(512), check_input=False), 2),
+            id="nine-dense-targets",
+        ),
+        pytest.param(CUGate(0.1, 0.2, 0.3, 0.4).control(7, annotated=False), id="base-without-matrix"),
+        pytest.param(GlobalPhaseGate(0.3).control(9, annotated=False), id="no-target"),
+        pytest.param(_controlled(UnitaryGate(np.diag([1.0, 2.0]), check_input=False), 8), id="non-unitary-base"),
+    ],
+)
+def test_wide_controlled_gate_without_a_single_target_operator_falls_back(gate: Gate) -> None:
+    """A wide controlled gate that is not controls plus one unitary target operator keeps the fallback limit."""
+    qc = QuantumCircuit(gate.num_qubits)
+    qc.append(gate, range(gate.num_qubits))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+
+def test_wide_controlled_gate_survives_pickling() -> None:
+    """A wide controlled gate keeps its MPO through pickling, as trajectory workers receive it."""
+    qc = QuantumCircuit(10)
+    qc.mcx(list(range(9)), 9)
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    restored = pickle.loads(pickle.dumps(gate))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sites == gate.sites
+    for restored_tensor, tensor in zip(restored.mpo_tensors, gate.mpo_tensors, strict=True):
+        assert_allclose(restored_tensor, tensor)
 
 
 def test_custom_three_qubit_unitary_gate_translation() -> None:
@@ -881,3 +1196,500 @@ def test_select_starting_point_follows_circuit_positions_across_registers(
 
     assert first_iter == range(1, 3, 2), "Expected odd qubits first."
     assert second_iter == range(0, 3, 2), "Then the even qubit pairs."
+
+
+def _full_pauli_label(num_qubits: int, qubits: list[int], label: str) -> str:
+    """Return the register-wide Qiskit label of a gate ``label`` placed on ``qubits``."""
+    full = ["I"] * num_qubits
+    for factor, single in enumerate(reversed(label)):
+        full[qubits[factor]] = single
+    return "".join(reversed(full))
+
+
+def _dense_pauli_rotation(
+    num_qubits: int, qubits: list[int], labels: list[str], coeffs: list[float], time: float
+) -> np.ndarray:
+    """Return ``exp(-i time sum_k coeffs_k P_k)`` on the whole register, site zero least significant."""
+    generator = np.zeros((2**num_qubits, 2**num_qubits), dtype=np.complex128)
+    for label, coeff in zip(labels, coeffs, strict=True):
+        generator += coeff * SparsePauliOp([_full_pauli_label(num_qubits, qubits, label)]).to_matrix()
+    return expm(-1j * time * generator)
+
+
+def test_wide_pauli_rotation_builds_its_mpo_without_a_matrix() -> None:
+    """A Pauli-string rotation on more than eight qubits is built from its two strings."""
+    qc = QuantumCircuit(12)
+    qc.append(PauliEvolutionGate(SparsePauliOp(["X" + "Z" * 10 + "X"]), time=0.37), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert gate.interaction == 12
+    assert gate.sites == list(range(12))
+    assert not hasattr(gate, "matrix")
+    assert not hasattr(gate, "generator")
+    # cos(t) I - i sin(t) P are two product strings, so every cut of the support carries two.
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2] * 11
+
+
+def test_wide_pauli_string_builds_its_mpo_without_a_matrix() -> None:
+    """A Pauli string on more than eight qubits is one product string, so every bond is one."""
+    qc = QuantumCircuit(12)
+    qc.append(PauliGate("XYZXYZXYZXYZ"), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(gate, "matrix")
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [1] * 11
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "qubits", "labels", "coeffs", "time", "bonds"),
+    [
+        pytest.param(10, list(range(10)), ["X" + "Z" * 8 + "X"], [1.0], 0.37, [2] * 9, id="one-term"),
+        pytest.param(
+            10,
+            [8, 1, 6, 3, 0, 9, 2, 7, 4],
+            ["XYZXZYXZZ"],
+            [1.0],
+            0.31,
+            None,
+            id="unsorted-with-a-spectator",
+        ),
+        pytest.param(
+            10,
+            list(range(10)),
+            ["X" + "Z" * 8 + "X", "Y" + "Z" * 8 + "Y"],
+            [0.3, -0.2],
+            0.25,
+            [4] * 9,
+            id="jordan-wigner-hopping",
+        ),
+        pytest.param(
+            10,
+            list(range(10)),
+            ["ZZIIIIIIII", "IIZZIIIIII", "ZZZZIIIIII"],
+            [0.4, 0.5, 0.6],
+            0.2,
+            None,
+            id="three-commuting-terms",
+        ),
+        pytest.param(9, list(range(9)), ["Z" * 9], [1.0], 0.0, [1] * 8, id="zero-angle"),
+        pytest.param(9, list(range(9)), ["Z" * 9], [1.0], np.pi / 2, [1] * 8, id="quarter-turn"),
+        pytest.param(9, list(range(9)), ["XIIIIIIIX"], [1.0], 0.4, [2] * 8, id="support-at-the-ends"),
+    ],
+)
+def test_wide_pauli_rotation_matches_the_dense_gate(
+    num_qubits: int,
+    qubits: list[int],
+    labels: list[str],
+    coeffs: list[float],
+    time: float,
+    bonds: list[int] | None,
+) -> None:
+    """A wide Pauli rotation equals its dense definition for any support, order and angle."""
+    qc = QuantumCircuit(num_qubits)
+    qc.append(PauliEvolutionGate(SparsePauliOp(labels, coeffs=np.asarray(coeffs)), time=time), qubits)
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_pauli_rotation(num_qubits, qubits, labels, coeffs, time)
+    assert_allclose(MPO.from_gate(gate, num_qubits).to_matrix(), expected, atol=1e-10)
+    if bonds is not None:
+        assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == bonds
+
+
+def test_wide_pauli_string_matches_the_dense_gate() -> None:
+    """A wide Pauli string equals its dense definition on unsorted qubits."""
+    qubits = [8, 1, 6, 3, 0, 9, 2, 7, 4]
+    qc = QuantumCircuit(10)
+    qc.append(PauliGate("XYZXYZXYZ"), qubits)
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = SparsePauliOp([_full_pauli_label(10, qubits, "XYZXYZXYZ")]).to_matrix()
+    assert_allclose(MPO.from_gate(gate, 10).to_matrix(), expected, atol=1e-10)
+
+
+def test_wide_pauli_rotation_keeps_its_bond_as_the_span_grows() -> None:
+    """The bond of a Pauli rotation follows its term count, not the distance it reaches over."""
+    bonds = []
+    for span in (12, 24, 40):
+        qc = QuantumCircuit(span)
+        qc.append(PauliEvolutionGate(SparsePauliOp(["X" + "Z" * (span - 2) + "X"]), time=0.3), range(span))
+        (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+        bonds.append(max(tensor.shape[3] for tensor in gate.mpo_tensors[:-1]))
+
+    assert bonds == [2, 2, 2]
+
+
+@pytest.mark.parametrize(
+    "operator",
+    [
+        pytest.param(SparsePauliOp(["XXIIIIIIII", "ZIIIIIIIIZ"]), id="non-commuting-terms"),
+        pytest.param(
+            SparsePauliOp(["Z" * 10] * 40 + ["IIIIIIIIIX"], coeffs=np.full(41, 0.1)),
+            id="one-non-commuting-term-among-many",
+        ),
+        pytest.param(
+            SparsePauliOp([("I" * i + "ZZ" + "I" * (8 - i)) for i in range(7)], coeffs=np.full(7, 0.3)),
+            id="too-many-terms",
+        ),
+        pytest.param(
+            SparsePauliOp(PauliList(["-iX" + "Y" * 9]), np.array([1.0]), ignore_pauli_phase=True),
+            id="phase-on-the-label",
+        ),
+    ],
+)
+def test_wide_pauli_rotation_outside_the_closed_form_falls_back(operator: SparsePauliOp) -> None:
+    """A rotation that is not a short commuting Pauli sum keeps the fallback limit."""
+    qc = QuantumCircuit(10)
+    qc.append(PauliEvolutionGate(operator, time=0.3), range(10))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+
+def test_wide_pauli_rotation_with_many_repeated_terms_matches_the_dense_gate() -> None:
+    """Thousands of repeated terms are checked for commutation at once and add up to one rotation."""
+    qc = QuantumCircuit(10)
+    qc.append(PauliEvolutionGate(SparsePauliOp(["Z" * 10] * 2000, coeffs=np.full(2000, 1e-4)), time=0.3), range(10))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_pauli_rotation(10, list(range(10)), ["Z" * 10], [0.2], 0.3)
+    assert_allclose(MPO.from_gate(gate, 10).to_matrix(), expected, atol=1e-10)
+
+
+def test_wide_pauli_rotation_over_several_operators_falls_back() -> None:
+    """A Pauli evolution carrying a list of operators is not one Pauli sum, so it falls back."""
+    qc = QuantumCircuit(10)
+    operators = [SparsePauliOp(["Z" * 10]), SparsePauliOp(["X" * 10])]
+    qc.append(PauliEvolutionGate(operators, time=0.3), range(10))
+
+    with pytest.raises(ValueError, match="matrix fallback supports at most"):
+        convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+
+def test_wide_pauli_rotation_survives_pickling() -> None:
+    """A wide Pauli rotation keeps its MPO through pickling, as trajectory workers receive it."""
+    qc = QuantumCircuit(10)
+    qc.append(PauliEvolutionGate(SparsePauliOp(["X" + "Z" * 8 + "X"]), time=0.3), range(10))
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    restored = pickle.loads(pickle.dumps(gate))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sites == gate.sites
+    for original, copied in zip(gate.mpo_tensors, restored.mpo_tensors, strict=True):
+        assert_allclose(copied, original, atol=0.0)
+
+
+def test_wide_multi_target_gate_builds_its_mpo_without_a_matrix() -> None:
+    """A controlled gate with more than eight targets is built from its one-qubit factors."""
+    qc = QuantumCircuit(12)
+    qc.append(MCMTGate(XGate(), 3, 9), range(12))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert gate.interaction == 12
+    assert not hasattr(gate, "matrix")
+    assert not hasattr(gate, "generator")
+    # The difference of a product telescopes into two states, so the channel carries bond two.
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2] * 11
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "gate", "qubits", "bonds"),
+    [
+        pytest.param(9, MCMTGate(XGate(), 3, 6), list(range(9)), [2] * 8, id="fan-out-contiguous"),
+        pytest.param(
+            9,
+            MCMTGate(XGate(), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            [2, 3, 3, 3, 3, 3, 3, 2],
+            id="fan-out-with-controls-spread-out",
+        ),
+        pytest.param(
+            11,
+            MCMTGate(XGate(), 3, 6),
+            [0, 1, 2, 4, 5, 6, 8, 9, 10],
+            [2] * 10,
+            id="fan-out-with-spectators",
+        ),
+        pytest.param(9, MCMTGate(RYGate(0.3), 2, 7), list(range(9)), [2] * 8, id="fan-out-of-a-rotation"),
+        pytest.param(9, MCMTGate(XGate(), 7, 2), list(range(9)), [2] * 8, id="several-targets-of-one-base"),
+        pytest.param(9, MCMTGate(PauliGate("X"), 3, 6), list(range(9)), [2] * 8, id="fan-out-of-a-pauli-gate"),
+        pytest.param(
+            9, MCMTGate(IGate(), 3, 6), [0, 4, 8, 1, 2, 3, 5, 6, 7], [1] * 8, id="identity-target-controls-spread-out"
+        ),
+        pytest.param(
+            9,
+            MCMTGate(UnitaryGate(np.exp(0.3j) * np.eye(2)), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            [2] * 8,
+            id="phase-target-controls-spread-out",
+        ),
+        pytest.param(5, MCMTGate(RZGate(2 * np.pi), 2, 3), list(range(5)), [2, 1, 1, 1], id="phase-up-to-rounding"),
+        pytest.param(
+            11,
+            PauliGate("IIIIIIIIX").control(2),
+            [0, 10, *range(1, 10)],
+            [2] * 10,
+            id="identity-letters-around-one-factor",
+        ),
+        pytest.param(
+            11,
+            PauliGate("IIXYZXYII").control(2),
+            [0, 10, *range(1, 10)],
+            [2, 2, 2, 3, 3, 3, 3, 2, 2, 2],
+            id="identity-letters-at-the-edges",
+        ),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3),
+            list(range(10)),
+            [2] * 9,
+            id="controlled-pauli-string",
+        ),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3, ctrl_state=0b010),
+            [9, 0, 5, 1, 2, 3, 4, 6, 7, 8],
+            [2, 3, 3, 3, 3, 3, 3, 3, 2],
+            id="controlled-pauli-string-unsorted",
+        ),
+    ],
+)
+def test_wide_multi_target_gate_mpo_has_the_minimal_bond(
+    num_qubits: int, gate: Gate, qubits: list[int], bonds: list[int]
+) -> None:
+    """A controlled product target carries the minimal bond, also when some or all of its factors are phases."""
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    ("num_qubits", "gate", "qubits"),
+    [
+        pytest.param(9, MCMTGate(XGate(), 3, 6), list(range(9)), id="fan-out-of-x"),
+        pytest.param(9, MCMTGate(HGate(), 3, 6), list(range(9)), id="fan-out-of-h"),
+        pytest.param(9, MCMTGate(RYGate(0.3), 2, 7), list(range(9)), id="fan-out-of-a-rotation"),
+        pytest.param(9, MCMTGate(XGate(), 7, 2), list(range(9)), id="two-targets-of-one-base"),
+        pytest.param(9, MCMTGate(IGate(), 3, 6), list(range(9)), id="identity-target"),
+        pytest.param(9, MCMTGate(PauliGate("Y"), 3, 6), list(range(9)), id="fan-out-of-a-pauli-gate"),
+        pytest.param(
+            9,
+            MCMTGate(UnitaryGate(np.exp(0.3j) * np.eye(2)), 3, 6),
+            [0, 4, 8, 1, 2, 3, 5, 6, 7],
+            id="phase-target-controls-spread-out",
+        ),
+        pytest.param(11, PauliGate("IIXYZXYII").control(2), [0, 10, *range(1, 10)], id="identity-letters-at-the-edges"),
+        pytest.param(10, PauliGate("XYZXYZXYZ").control(1), list(range(10)), id="one-control-nine-targets"),
+        pytest.param(
+            10,
+            PauliGate("XYZXYZX").control(3, ctrl_state=0b010),
+            [9, 0, 5, 1, 2, 3, 4, 6, 7, 8],
+            id="controlled-pauli-string-unsorted",
+        ),
+    ],
+)
+def test_wide_multi_target_gate_matches_the_dense_gate(num_qubits: int, gate: Gate, qubits: list[int]) -> None:
+    """A controlled product target equals its definition for any base, order and control pattern."""
+    qc = QuantumCircuit(num_qubits)
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert_allclose(MPO.from_gate(yaqs_gate, num_qubits).to_matrix(), Operator(qc).data, atol=1e-12)
+
+
+def test_wide_multi_target_gate_survives_pickling() -> None:
+    """A wide multi-target gate keeps its MPO through pickling, as trajectory workers receive it."""
+    qc = QuantumCircuit(12)
+    qc.append(MCMTGate(XGate(), 3, 9), range(12))
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    restored = pickle.loads(pickle.dumps(gate))  # ruff: ignore[suspicious-pickle-usage]  # controlled round-trip
+
+    assert restored.sites == gate.sites
+    for original, copied in zip(gate.mpo_tensors, restored.mpo_tensors, strict=True):
+        assert_allclose(copied, original, atol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("gate", "qubits", "bonds"),
+    [
+        pytest.param(MCXGate(3), [0, 1, 2, 3], [2, 2, 2], id="mcx-on-four-qubits"),
+        pytest.param(MCXGate(7, ctrl_state=0b1011001), [0, 1, 2, 3, 5, 6, 7, 4], [2] * 7, id="mcx-target-inside"),
+        pytest.param(ZGate().control(7, annotated=True), list(range(8)), [2] * 7, id="annotated-z-on-eight-qubits"),
+        # Open controls give names outside the gate library, such as ``ccx_o1`` and ``cswap_o0``.
+        pytest.param(CCXGate(ctrl_state=1), [0, 1, 2], [2, 2], id="toffoli-with-an-open-control"),
+        pytest.param(CSwapGate(ctrl_state=0), [0, 1, 2], [2, 4], id="fredkin-with-an-open-control"),
+        pytest.param(SwapGate().control(2, annotated=False), [0, 1, 2, 3], [2, 2, 4], id="swap-with-two-controls"),
+        pytest.param(MCMTGate(XGate(), 3, 5), list(range(8)), [2] * 7, id="multi-target-on-eight-qubits"),
+        pytest.param(MCMTGate(XGate(), 1, 2), [1, 0, 2], [2, 2], id="multi-target-control-between"),
+        pytest.param(
+            PauliGate("XYZ").control(2, annotated=False), list(range(5)), [2] * 4, id="controlled-pauli-string"
+        ),
+        pytest.param(PauliGate("XYZXYZXY"), list(range(8)), [1] * 7, id="pauli-string"),
+    ],
+)
+def test_gate_from_three_qubits_is_built_from_its_parts(gate: Gate, qubits: list[int], bonds: list[int]) -> None:
+    """From three qubits on, a gate whose parts Qiskit states is built from them at the minimal bond."""
+    qc = QuantumCircuit(len(qubits))
+    qc.append(gate, qubits)
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(yaqs_gate, "matrix")
+    assert_allclose(MPO.from_gate(yaqs_gate, len(qubits)).to_matrix(), Operator(qc).data, atol=1e-12)
+    assert [tensor.shape[3] for tensor in yaqs_gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    ("labels", "coeffs", "bonds"),
+    [
+        pytest.param(["XZZX"], [1.0], [2, 2, 2], id="one-string"),
+        pytest.param(["IXZXI"], [1.0], [1, 2, 2, 1], id="identity-letters-at-the-ends"),
+        pytest.param(["XZZZX", "YZZZY"], [0.3, -0.2], [4] * 4, id="jordan-wigner-hopping"),
+    ],
+)
+def test_pauli_rotation_from_three_qubits_is_built_from_its_terms(
+    labels: list[str], coeffs: list[float], bonds: list[int]
+) -> None:
+    """A Pauli rotation on three to eight qubits is built from its strings, never from Qiskit's matrix."""
+    num_qubits = len(labels[0])
+    qc = QuantumCircuit(num_qubits)
+    qc.append(PauliEvolutionGate(SparsePauliOp(labels, coeffs=np.asarray(coeffs)), time=0.3), range(num_qubits))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert not hasattr(gate, "matrix")
+    expected = _dense_pauli_rotation(num_qubits, list(range(num_qubits)), labels, coeffs, 0.3)
+    assert_allclose(MPO.from_gate(gate, num_qubits).to_matrix(), expected, atol=1e-12)
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == bonds
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        pytest.param(CUGate(0.1, 0.2, 0.3, 0.4).control(1, annotated=False), id="base-without-matrix"),
+        pytest.param(GlobalPhaseGate(0.3).control(3, annotated=False), id="no-target"),
+        pytest.param(AnnotatedOperation(CCXGate(), [ControlModifier(0)]), id="no-control"),
+    ],
+)
+def test_gate_from_three_qubits_outside_the_builders_keeps_its_matrix(gate: Operation) -> None:
+    """A gate on three to eight qubits that no builder takes keeps the dense fallback."""
+    qc = QuantumCircuit(gate.num_qubits)
+    qc.append(gate, range(gate.num_qubits))
+
+    (yaqs_gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert hasattr(yaqs_gate, "matrix")
+    assert_allclose(MPO.from_gate(yaqs_gate, gate.num_qubits).to_matrix(), Operator(qc).data, atol=1e-12)
+
+
+@pytest.mark.filterwarnings("ignore::scipy.sparse.SparseEfficiencyWarning")
+def test_non_commuting_pauli_rotation_from_three_qubits_keeps_its_matrix() -> None:
+    """A Pauli rotation whose terms do not commute keeps the dense fallback up to eight qubits.
+
+    The reference is the gate's own dense matrix rather than the exact exponential of the generator,
+    because for non-commuting terms the two differ by the Trotter error of the gate's definition on
+    the Qiskit versions that give no matrix for ``PauliEvolutionGate``.
+    """
+    qc = QuantumCircuit(4)
+    qc.append(PauliEvolutionGate(SparsePauliOp(["XXII", "ZIIZ"]), time=0.3), range(4))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    assert hasattr(gate, "matrix")
+    assert_allclose(MPO.from_gate(gate, 4).to_matrix(), Operator(qc).data, atol=1e-12)
+
+
+def test_pauli_rotation_keeps_a_small_angle_exactly() -> None:
+    """At a small angle the hopping term keeps its weak string, so the MPO equals the gate to round-off."""
+    labels = ["XZZZZX", "YZZZZY"]
+    qc = QuantumCircuit(6)
+    qc.append(PauliEvolutionGate(SparsePauliOp(labels), time=1e-7), range(6))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_pauli_rotation(6, list(range(6)), labels, [1.0, 1.0], 1e-7)
+    assert_allclose(MPO.from_gate(gate, 6).to_matrix(), expected, atol=1e-15)
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [4] * 5
+
+
+def test_commuting_rotations_that_factorize_have_bond_one_between_them() -> None:
+    """Rotations on disjoint qubits multiply to a product, so the cuts between them carry bond one."""
+    labels = ["IIIIZZ", "ZZIIII"]
+    qc = QuantumCircuit(6)
+    qc.append(PauliEvolutionGate(SparsePauliOp(labels, coeffs=np.array([0.4, 0.7])), time=1.0), range(6))
+
+    (gate,) = convert_dag_to_tensor_algorithm(circuit_to_dag(qc))
+
+    expected = _dense_pauli_rotation(6, list(range(6)), labels, [0.4, 0.7], 1.0)
+    assert_allclose(MPO.from_gate(gate, 6).to_matrix(), expected, atol=1e-12)
+    assert [tensor.shape[3] for tensor in gate.mpo_tensors[:-1]] == [2, 1, 1, 1, 2]
+
+
+def test_controlled_gate_binds_sites_given_as_lists() -> None:
+    """``set_sites`` accepts a list of indices as well as single indices."""
+    gate = _ControlledGate(np.eye(2, dtype=np.complex128), [1, 1])
+
+    gate.set_sites([0, 1], 2)
+
+    assert gate.sites == [0, 1, 2]
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_controlled_gate_rejects_a_site_count_below_its_interaction() -> None:
+    """A gate bound to fewer or more sites than it acts on must raise."""
+    gate = _ControlledGate(np.eye(2, dtype=np.complex128), [1])
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
+
+def test_pauli_sum_gate_binds_sites_given_as_lists() -> None:
+    """``set_sites`` of the Pauli-sum gate accepts a list of indices as well as single indices."""
+    gate = _PauliSumGate([(1.0 + 0j, {0: "X", 2: "Z"})], 3)
+
+    gate.set_sites([0, 1, 2])
+
+    assert gate.sites == [0, 1, 2]
+    assert len(gate.mpo_tensors) == 3
+
+
+def test_pauli_sum_gate_rejects_a_site_count_below_its_interaction() -> None:
+    """A Pauli-sum gate bound to fewer or more sites than it acts on must raise."""
+    gate = _PauliSumGate([(1.0 + 0j, {0: "X"})], 2)
+
+    with pytest.raises(ValueError, match="Number of sites 3 must be equal to the interaction level 2"):
+        gate.set_sites(0, 1, 2)
+
+
+def test_pauli_string_that_does_not_span_its_sites_falls_back() -> None:
+    """A Pauli label that does not cover every site is not built from the label."""
+    assert _translate_pauli_string(PauliGate("XYZ"), name="pauli", sites=[0, 1]) is None
+
+
+def test_pauli_evolution_whose_time_is_not_a_number_falls_back() -> None:
+    """An evolution time that does not convert to a float is not built from the terms."""
+    gate = PauliEvolutionGate(SparsePauliOp(["XZZX"]), time=Parameter("t"))
+
+    assert _translate_pauli_evolution(gate, name="pauli-evolution", sites=[0, 1, 2, 3]) is None
+
+
+def test_target_without_a_matrix_is_not_a_product_of_factors() -> None:
+    """A target the gate gives no matrix for cannot be split into one-qubit factors."""
+    assert _target_factors(Gate("opaque", 1, []), 2, name="opaque") is None
+
+
+def test_non_unitary_target_is_not_a_product_of_factors() -> None:
+    """A target that is not unitary cannot be split into one-qubit factors."""
+    base = UnitaryGate(np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.complex128), check_input=False)
+
+    assert _target_factors(base, 2, name="nonunitary") is None

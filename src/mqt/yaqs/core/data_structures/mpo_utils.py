@@ -169,8 +169,8 @@ def get_support_mpo(
     """MPO tensors for the gate support ``[first_site, last_site]`` in library order.
 
     Args:
-        gate: Gate with optional cached ``mpo_tensors``; the ``extend_gate`` fallback applies to
-            two-qubit gates.
+        gate: Gate with optional cached ``mpo_tensors``, which a gate without ``tensor`` must provide;
+            the ``extend_gate`` fallback applies to two-qubit gates.
         first_site: First site of the support interval (inclusive).
         last_site: Last site of the support interval (inclusive).
         physical_dimensions: Optional local dimensions for the support interval.
@@ -179,7 +179,8 @@ def get_support_mpo(
             determine the identity tensor at each spectator site.
 
     Returns:
-        Support MPO tensors from the gate cache or :func:`~mqt.yaqs.core.libraries.gate_library.extend_gate`.
+        Support MPO tensors from the gate cache or :func:`~mqt.yaqs.core.libraries.gate_library.extend_gate`;
+        a gate without a dense tensor widens the cached spectator identities to the window dimensions.
 
     Raises:
         ValueError: If explicit dimensions do not match the support or a gate target is not a qubit.
@@ -202,6 +203,13 @@ def get_support_mpo(
             cached = None
         if cached is not None and len(cached) == support_len:
             return list(cached)
+
+    if dimensions is not None and getattr(gate, "tensor", None) is None:
+        # Without a dense tensor, widen the identity of each spectator to the window dimension.
+        return [
+            tensor if dimension == 2 else oe.contract("lr,ab->ablr", tensor[0, 0], np.eye(dimension))
+            for tensor, dimension in zip(gate.mpo_tensors, dimensions, strict=True)
+        ]
 
     if gate.interaction == 2:
         tensor = resolve_lr_tensor(gate)
