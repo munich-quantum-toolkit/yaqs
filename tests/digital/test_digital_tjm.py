@@ -1755,6 +1755,28 @@ def test_lr_small_angle_gate_survives_gate_mpo(theta: float, gate_mode: str) -> 
     assert float(np.real(result.expectation_values[0][-1])) == pytest.approx(-np.sin(theta), abs=1e-12)
 
 
+@pytest.mark.parametrize("gate_mode", ["mpo", "swaps"])
+def test_single_small_angle_lr_gate_keeps_weak_schmidt_direction(gate_mode: str) -> None:
+    """A single weak long-range rzz must survive the default truncation settings.
+
+    The second Schmidt value is ``sin(theta / 2) = 5e-4``, whose squared weight is
+    below the default ``svd_threshold``. Both gate modes must retain that direction,
+    so ``<Y_1 Z_4> = sin(theta)`` to machine precision.
+    """
+    length = 8
+    theta = 1e-3
+    qc = QuantumCircuit(length)
+    qc.h(range(length))
+    qc.rzz(theta, 1, 4)
+
+    params = DigitalSimParams(get_state=True, gate_mode=cast("GateMode", gate_mode))
+    result = Simulator(parallel=False, show_progress=False).run(State(length, initial="zeros"), qc, params, None)
+    assert result.output_state is not None
+
+    expectation = Statevector(result.output_state.mps.to_vec()).expectation_value(Pauli("IIIZIIYI")).real
+    assert float(expectation) == pytest.approx(np.sin(theta), abs=1e-12)
+
+
 def test_zip_lr_vs_tdvp() -> None:
     """Long-range gates use MPO mode and match full-tdvp."""
     qc = QuantumCircuit(4)
