@@ -12,6 +12,7 @@ releases may include breaking changes.
 
 ### Changed
 
+- ⬆️ Require Python 3.11.5 or newer ([#687]) ([**@denialhaag**])
 - cached the thread-pool controller in dense matrix exponentials ([#655])
   ([**@Pouri96**])
 
@@ -320,6 +321,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#687]: https://github.com/munich-quantum-toolkit/yaqs/pull/687
 [#655]: https://github.com/munich-quantum-toolkit/yaqs/pull/655
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
 [#643]: https://github.com/munich-quantum-toolkit/yaqs/pull/643
