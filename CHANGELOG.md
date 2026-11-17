@@ -12,7 +12,7 @@ releases may include breaking changes.
 
 ### Changed
 
-- ⬆️ Require Python 3.11.5 or newer ([#687]) ([**@denialhaag**])
+- require Python 3.11.5 or newer ([#687]) ([**@denialhaag**])
 - cached the thread-pool controller in dense matrix exponentials ([#655])
   ([**@Pouri96**])
 
