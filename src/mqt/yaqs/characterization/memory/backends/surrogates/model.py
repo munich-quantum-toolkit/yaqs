@@ -173,7 +173,7 @@ class ProcessTensorSurrogate(nn.Module):
             raise TypeError(msg)
         return int(in_proj.in_features) - self._d_side
 
-    def forward(  # ty: ignore[invalid-mutable-override]
+    def forward(
         self,
         e_features: torch.Tensor,
         rho0: torch.Tensor,
