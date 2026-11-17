@@ -16,8 +16,9 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
+from qiskit.circuit.library import MCMTGate, MCXGate, PauliGate, SwapGate, XGate
 from qiskit.converters import circuit_to_dag
-from qiskit.quantum_info import Statevector, random_unitary
+from qiskit.quantum_info import Pauli, Statevector, random_unitary
 
 from mqt.yaqs.core.data_structures.mpo import MPO
 from mqt.yaqs.core.data_structures.mps import MPS
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from numpy.typing import NDArray
+    from qiskit.circuit import Gate
 
 
 def _sim_params() -> DigitalSimParams:
@@ -404,6 +406,63 @@ def test_long_range_gate_on_qudit_spectators_matches_full_chain_mpo(
     assert state.orthogonality_center in state.check_canonical_form()
 
 
+@pytest.mark.parametrize(
+    ("physical_dimensions", "controls", "targets", "gate", "act"),
+    [
+        pytest.param(
+            [2] * 5 + [3] + [2] * 4,
+            [0, 1, 2, 3, 4, 6, 7, 8],
+            [9],
+            MCXGate(8),
+            lambda block, axes: np.flip(block, axis=axes[0]),
+            id="qudit-between-controls",
+        ),
+        pytest.param(
+            [2] * 9 + [3] + [2],
+            list(range(8)),
+            [8, 10],
+            SwapGate().control(8, annotated=False),
+            lambda block, axes: np.swapaxes(block, *axes),
+            id="qudit-between-targets",
+        ),
+        pytest.param(
+            [2] * 5 + [3] + [2] * 5,
+            [0, 1, 2],
+            [3, 4, 6, 7, 8, 9, 10],
+            MCMTGate(XGate(), 3, 7),
+            lambda block, axes: np.flip(block, axis=tuple(axes)),
+            id="qudit-between-many-targets",
+        ),
+    ],
+)
+def test_wide_controlled_gate_widens_a_qudit_spectator(
+    physical_dimensions: list[int],
+    controls: list[int],
+    targets: list[int],
+    gate: Gate,
+    act: Callable[[NDArray[np.complex128], list[int]], NDArray[np.complex128]],
+) -> None:
+    """A controlled gate on more than eight qubits acts exactly on a state with a qudit spectator in its window."""
+    qc = QuantumCircuit(len(physical_dimensions))
+    qc.append(gate, [*controls, *targets])
+    yaqs_gate = _gate_from_circuit(qc)
+    state = _seeded_qudit_mps(physical_dimensions, seed=20261031)
+
+    # Site 0 is the fastest index of ``to_vec``: act on the targets where every control reads 1.
+    last = len(physical_dimensions) - 1
+    psi = state.to_vec().reshape(physical_dimensions[::-1])
+    window = [slice(None)] * len(physical_dimensions)
+    for site in controls:
+        window[last - site] = slice(1, 2)
+    expected = psi.copy()
+    expected[tuple(window)] = act(psi[tuple(window)], [last - site for site in targets])
+
+    apply_long_range_gate_mpo(state, yaqs_gate, _sim_params())
+
+    assert _fidelity(state.to_vec(), expected.reshape(-1)) >= 1.0 - 1e-12
+    assert [tensor.shape[0] for tensor in state.tensors] == physical_dimensions
+
+
 @pytest.mark.parametrize("known_gauge", [True, False], ids=["known_gauge", "unknown_gauge"])
 def test_long_range_gate_tracks_orthogonality_center(*, known_gauge: bool) -> None:
     """The tracked center after the gate is a genuine canonical center of the full chain."""
@@ -436,3 +495,26 @@ def test_long_range_gate_enters_window_from_right_at_nearest_boundary() -> None:
     assert _fidelity(state.to_vec(), expected) >= 1.0 - 1e-10
     assert state.orthogonality_center == last_site
     assert state.orthogonality_center in state.check_canonical_form()
+
+
+def test_wide_pauli_gate_widens_a_qudit_spectator() -> None:
+    """A Pauli gate on more than eight qubits acts exactly on a state with a qudit spectator."""
+    physical_dimensions = [2] * 5 + [3] + [2] * 4
+    qubits = [0, 1, 2, 3, 4, 6, 7, 8, 9]
+    label = "XYZXYZXYZ"
+    qc = QuantumCircuit(len(physical_dimensions))
+    qc.append(PauliGate(label), qubits)
+    yaqs_gate = _gate_from_circuit(qc)
+    state = _seeded_qudit_mps(physical_dimensions, seed=20261031)
+
+    # Site 0 is the fastest index of ``to_vec``, and ``label[-1 - j]`` acts on ``qubits[j]``.
+    last = len(physical_dimensions) - 1
+    expected = state.to_vec().reshape(physical_dimensions[::-1])
+    for j, site in enumerate(qubits):
+        factor = Pauli(label[-1 - j]).to_matrix()
+        expected = np.moveaxis(np.tensordot(factor, expected, axes=(1, last - site)), 0, last - site)
+
+    apply_long_range_gate_mpo(state, yaqs_gate, _sim_params())
+
+    assert _fidelity(state.to_vec(), expected.reshape(-1)) >= 1.0 - 1e-12
+    assert [tensor.shape[0] for tensor in state.tensors] == physical_dimensions

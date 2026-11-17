@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -19,7 +19,7 @@ from qiskit.converters import circuit_to_dag
 from qiskit.quantum_info import Operator
 
 from mqt.yaqs import EquivalenceChecker
-from mqt.yaqs.core.libraries.gate_library import BaseGate
+from mqt.yaqs.core.libraries.gate_library import BaseGate, GateLibrary
 from mqt.yaqs.digital.utils.dag_utils import convert_dag_to_tensor_algorithm
 from mqt.yaqs.digital.utils.matrix_utils import (
     apply_gate_left,
@@ -28,6 +28,7 @@ from mqt.yaqs.digital.utils.matrix_utils import (
     is_identity_tensor,
     make_identity_tensor,
 )
+from tests.conftest import YAQS_TEST_SEED
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -232,6 +233,22 @@ def test_apply_gate_left_translated_ccx_consistent_with_decomposition() -> None:
     dense_decomposed = dense_operator(decomposed)
     global_phase = np.exp(1j * decomposed.global_phase)
     np.testing.assert_allclose(dense_ccx, global_phase * dense_decomposed, atol=1e-12)
+
+
+@pytest.mark.parametrize("dagger", [False, True])
+def test_apply_gate_left_uses_the_mpo_of_a_gate_without_matrix(*, dagger: bool) -> None:
+    """A gate given only by MPO tensors acts like its dense matrix, with a spectator inside its span."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(3, 0, 2)
+    stub = cast(
+        "BaseGate", type("GateStub", (), {"interaction": 3, "sites": [3, 0, 2], "mpo_tensors": gate.mpo_tensors})()
+    )
+    rng = np.random.default_rng(YAQS_TEST_SEED)
+    op = rng.normal(size=(2,) * 8) + 1j * rng.normal(size=(2,) * 8)
+
+    np.testing.assert_allclose(
+        apply_gate_left(op, stub, 4, dagger=dagger), apply_gate_left(op, gate, 4, dagger=dagger), atol=1e-12
+    )
 
 
 def test_check_matrix_equivalence_ccx_vs_decomposition() -> None:

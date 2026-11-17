@@ -156,6 +156,21 @@ def test_get_support_mpo_calls_extend_gate_without_cache() -> None:
     np.testing.assert_allclose(support[1], expected[1])
 
 
+def test_get_support_mpo_widens_spectators_of_a_gate_without_tensor() -> None:
+    """A gate with only ``mpo_tensors`` widens each spectator identity to the window dimension."""
+    gate = GateLibrary.ccx()
+    gate.set_sites(0, 1, 3)
+    attributes = {"interaction": 3, "sites": [0, 1, 3], "mpo_tensors": gate.mpo_tensors}
+    stub = cast("BaseGate", type("GateStub", (), attributes)())
+
+    support = get_support_mpo(stub, first_site=0, last_site=3, physical_dimensions=[2, 2, 3, 2])
+
+    expected = extend_gate(gate.tensor, [0, 1, 3], physical_dimensions=[2, 2, 3, 2])
+    assert len(support) == len(expected)
+    for tensor, reference in zip(support, expected, strict=True):
+        np.testing.assert_allclose(tensor, reference)
+
+
 def test_contract_mpo_site_with_mps_site() -> None:
     """MPO--MPS site contraction fuses virtual bonds in library order."""
     mpo_site = make_identity_site(2)
