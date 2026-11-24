@@ -10,6 +10,10 @@ releases may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- enabled testing on Python 3.15 ([#693]) ([**@denialhaag**])
+
 ### Changed
 
 - require Python 3.11.5 or newer ([#687]) ([**@denialhaag**])
@@ -321,6 +325,7 @@ for previous changelogs._
 
 <!-- PR links -->
 
+[#693]: https://github.com/munich-quantum-toolkit/yaqs/pull/693
 [#687]: https://github.com/munich-quantum-toolkit/yaqs/pull/687
 [#655]: https://github.com/munich-quantum-toolkit/yaqs/pull/655
 [#645]: https://github.com/munich-quantum-toolkit/yaqs/pull/645
